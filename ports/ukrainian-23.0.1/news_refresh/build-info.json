@@ -1,0 +1,13 @@
+{
+  "build": "compiled",
+  "runtime_console_tested": false,
+  "firmware": "23.0.1",
+  "devkitA64": "r29.2-1",
+  "libnx": "4.12.0-1",
+  "switch-tools": "1.13.1-1",
+  "container_digest": "sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282",
+  "nro_sha256": "4cf767da71eb352b6906b3fb9cce325876d3e2b503e2acb07a0178c2cc689201",
+  "nro_bytes": 790584,
+  "host_tests": "4 tests passed with address and undefined-behavior sanitizers; all 41 mappings, idempotence, unrelated data, malformed inputs checked",
+  "console_data_or_keys_in_source": false
+}

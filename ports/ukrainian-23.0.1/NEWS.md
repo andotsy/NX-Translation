@@ -33,7 +33,10 @@ Next steps:
 4. A later updater should use the same tutorial IDs and preserve metadata/images;
    it must not clear the whole News database or alter subscriptions to repair text.
 
-No News storage reset, record replacement or service updater has been performed.
+The installed SD resource has now been verified byte-for-byte against the package.
+An optional [News refresh helper](news_refresh/README.md) is built and tested offline;
+its first console run is still pending. No News storage reset or record replacement
+has been performed.
 Console confirmation of the article content remains outstanding. Do not describe
 the full system translation as completely console-validated.
 

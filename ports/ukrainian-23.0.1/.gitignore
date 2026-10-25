@@ -10,3 +10,9 @@ firmware-*/
 romfs-temporary/
 translation-catalog.json
 manual-required.json
+news_refresh/*.elf
+news_refresh/*.nro
+news_refresh/*.nacp
+news_refresh/host_test
+news_refresh/translations.bin
+news_refresh/backup-*/

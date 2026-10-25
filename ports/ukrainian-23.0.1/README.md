@@ -28,7 +28,9 @@ Do not install the old 22.5.0 binary overlay on 23.0.1.
 
 Console photos show translated News controls with Russian built-in tutorial articles.
 The LocalNews translation is already built; runtime use and retained article content
-require separate checks. See [NEWS.md](NEWS.md) and the read-only diagnose_news.py.
+require separate checks. The installed overlay now matches the package byte-for-byte.
+See [NEWS.md](NEWS.md), the read-only diagnose_news.py and the optional
+[News refresh helper](news_refresh/README.md), whose first console run is pending.
 
 ## Local inputs
 
