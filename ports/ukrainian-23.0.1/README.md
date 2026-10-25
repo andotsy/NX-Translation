@@ -24,6 +24,12 @@ console identifiers or local paths are included. This directory contains the new
 builder, tests and Ukrainian additions. The translation candidate ZIPs remain local.
 Do not install the old 22.5.0 binary overlay on 23.0.1.
 
+## Known News coverage gap
+
+Console photos show translated News controls with Russian built-in tutorial articles.
+The LocalNews translation is already built; runtime use and retained article content
+require separate checks. See [NEWS.md](NEWS.md) and the read-only diagnose_news.py.
+
 ## Local inputs
 
 Obtain your own firmware and existing translation release. This tool does not download

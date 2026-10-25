@@ -5,5 +5,8 @@
   "pilot_user_selection_displays_ukrainian": true,
   "confirmed_prompt": "Хто користується програмою",
   "full_home_and_settings_tested": false,
-  "full_build_still_requires_console_validation": true
+  "full_build_still_requires_console_validation": true,
+  "news_controls_display_ukrainian": true,
+  "built_in_news_articles_display_ukrainian": false,
+  "news_article_gap": "Built overlay contains all 41 nonempty translated tutorial records; live file and retained News records need diagnosis."
 }
