@@ -1,0 +1,19 @@
+{
+  "firmware": "23.0.1",
+  "locale_replaced": "EUru",
+  "titles": 19,
+  "files": 53,
+  "message_records": 11108,
+  "translation_methods": {
+    "same_label_verified_source": 10877,
+    "manual_translation": 191,
+    "upstream_yaml_exact_plain_source": 5,
+    "translation_memory_verified_source": 21,
+    "nonlinguistic_original": 14
+  },
+  "manual_unresolved": 0,
+  "base_sections_preserved": true,
+  "console_tested": false,
+  "keys_included": false,
+  "unofficial_personal_test_build": true
+}

@@ -1,0 +1,12 @@
+work/
+__pycache__/
+*.pyc
+*.keys
+*.nca
+*.zip
+*.log
+python-deps/
+firmware-*/
+romfs-temporary/
+translation-catalog.json
+manual-required.json
