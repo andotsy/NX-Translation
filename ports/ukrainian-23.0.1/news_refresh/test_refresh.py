@@ -3,6 +3,7 @@
 from pathlib import Path
 import copy
 import json
+import os
 import random
 import struct
 import subprocess
@@ -107,6 +108,58 @@ class RefreshTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=WORK) as tmp:
             p = Path(tmp) / 'bad-table'; p.write_bytes(self.table.read_bytes()[:-1])
             self.call(raw, valid=False, table=p)
+
+    def test_zero_padded_news_storage_is_translated_as_one_serialized_map(self):
+        original = self.article()
+        raw = msgpack.packb(original, use_bin_type=True)
+        expected = copy.deepcopy(original)
+        expected['subject']['text'] = self.target
+        for padding in [1, 512, 524288 - len(raw)]:
+            report, after = self.call(raw + b'\0' * padding)
+            self.assertTrue(report['tutorial'])
+            self.assertEqual(msgpack.unpackb(after, raw=False), expected)
+            again, unchanged = self.call(after + b'\0' * 4096)
+            self.assertEqual(again['changes'], 0)
+            self.assertEqual(unchanged, after)
+
+    def test_nonzero_trailers_and_non_map_roots_are_rejected(self):
+        raw = msgpack.packb(self.article(), use_bin_type=True)
+        for suffix in [b'\1', b'\0' * 32 + b'\xc0', b'\0' * 32 + b'\xcc\0']:
+            self.call(raw + suffix, valid=False)
+        for raw in [b'\0' * 1024, b'\x90', b'\xa1x', b'\xc0']:
+            self.call(raw, valid=False)
+
+    @unittest.skipUnless(os.environ.get('NX_NEWS_CAPTURE'), 'private console sample not provided')
+    def test_private_console_snapshot_preserves_every_untranslated_field(self):
+        raw = Path(os.environ['NX_NEWS_CAPTURE']).read_bytes()
+        unpacker = msgpack.Unpacker(raw=False, strict_map_key=False)
+        unpacker.feed(raw)
+        original = unpacker.unpack()
+        consumed = unpacker.tell()
+        self.assertGreater(len(raw), consumed)
+        self.assertFalse(any(raw[consumed:]))
+        table = {source: target for source, target, _ in self.rows}
+        allowed = {'topic_name', 'subject.text', 'body.text', 'footer.text',
+                   'more.system_applet.text', 'more.text'}
+
+        def expected_value(value, path=''):
+            if isinstance(value, str) and path in allowed:
+                return table.get(value, value)
+            if isinstance(value, dict):
+                return {key: expected_value(child, path + ('.' if path else '') + str(key))
+                        for key, child in value.items()}
+            if isinstance(value, list):
+                return [expected_value(child, path + '[]') for child in value]
+            return value
+
+        report, after = self.call(raw)
+        self.assertTrue(report['tutorial'])
+        self.assertGreater(report['changes'], 0)
+        self.assertEqual(msgpack.unpackb(after, raw=False), expected_value(original))
+        self.assertLess(len(after), len(raw))
+        report, again = self.call(after + b'\0' * (len(raw) - len(after)))
+        self.assertEqual(report['changes'], 0)
+        self.assertEqual(again, after)
 
 
 if __name__ == '__main__':

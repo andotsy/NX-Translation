@@ -68,6 +68,20 @@ inline const Node* field(const Node& n,const Bytes& in,const std::string& path) 
     auto pos=path.find('.'); auto child=member(n,in,path.substr(0,pos));
     return child && pos!=std::string::npos ? field(*child,in,path.substr(pos+1)) : child;
 }
+// The News data service returns an allocated storage buffer. On the tested
+// console the MessagePack map occupies only part of a 512 KiB buffer. Accept
+// zero-filled storage padding, while retaining strict parsing everywhere else.
+inline Node articleRoot(const Bytes& in) {
+    Node root=Parser(in).parse();
+    if (!root.map) throw std::runtime_error("News article root is not a map");
+    for (size_t i=root.end;i<in.size();++i)
+        if (in[i]) throw std::runtime_error("Nonzero trailing News data");
+    return root;
+}
+inline Bytes articleBytes(const Bytes& in) {
+    Node root=articleRoot(in);
+    return Bytes(in.begin(),in.begin()+root.end);
+}
 struct Translation { std::string target; bool subject{}; };
 using Table=std::map<std::string,Translation>;
 inline Table parseTable(const Bytes& b) {
@@ -126,7 +140,7 @@ inline void rewrite(const Node& n,const Bytes& in,Bytes& out,const Table& table,
 }
 struct RewriteResult { Bytes data; unsigned changes{}; bool tutorial{}; };
 inline RewriteResult translate(const Bytes& in,const Table& table) {
-    Node root=Parser(in).document();
+    Node root=articleRoot(in);
     auto language=field(root,in,"language"), topic=field(root,in,"topic_id"), subject=field(root,in,"subject.text");
     RewriteResult result;
     if (!language || !topic || !subject || !language->string || !topic->string || !subject->string) return result;

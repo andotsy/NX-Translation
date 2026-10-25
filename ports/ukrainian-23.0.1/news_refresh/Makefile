@@ -9,8 +9,8 @@ LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs -g0 -march=armv8-a+crc+crypto 
 all: $(TARGET).nro
 $(TARGET).elf: main.cpp msgpack.hpp
 	$(CXX) $(CXXFLAGS) main.cpp $(LDFLAGS) -lnx -o $@
-$(TARGET).nacp:
-	nacptool --create "Ukrainian News Refresh" "andotsy" "0.1.0" $@
+$(TARGET).nacp: Makefile
+	nacptool --create "Ukrainian News Refresh 0.1.2" "andotsy" "0.1.2" $@
 $(TARGET).nro: $(TARGET).elf $(TARGET).nacp
 	elf2nro $(TARGET).elf $@ --nacp=$(TARGET).nacp
 
