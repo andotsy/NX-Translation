@@ -30,10 +30,10 @@ Console photos show translated News controls with Russian built-in tutorial arti
 The LocalNews translation is already built; runtime use and retained article content
 require separate checks. The installed overlay now matches the package byte-for-byte.
 See [NEWS.md](NEWS.md), the read-only diagnose_news.py and the optional
-[News refresh helper](news_refresh/README.md). Version 0.1.5 translated six tutorials,
-confirmed by a subsequent console scan. Version 0.1.7 targets the remaining
-channel-subscription article with a verified single-file update after version
-0.1.6 failed posting readback; its device validation is pending.
+[News refresh helper](news_refresh/README.md). The six original tutorials are
+confirmed translated. Version 0.1.8 verifies the remaining article's Ukrainian copy
+and retires only its obsolete Russian record through the News service. Its device
+validation is pending.
 
 ## Local inputs
 

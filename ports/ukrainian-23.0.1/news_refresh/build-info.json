@@ -6,9 +6,9 @@
   "libnx": "4.12.0-1",
   "switch-tools": "1.13.1-1",
   "container_digest": "sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282",
-  "nro_sha256": "681086269e457b948d843de570a08191495233f9f14b9951c44492a021f19e90",
-  "nro_bytes": 798776,
-  "host_tests": "11 tests passed with address and undefined-behavior sanitizers; seven native records; 45 mappings; full subscription article text/glyph/image/metadata preservation; injected partial-write, commit, readback and recovery failures",
+  "nro_sha256": "1ae40ae9221213e3e0cb660b40f7d0359ad48eb573316467cc376f7932ee04ef",
+  "nro_bytes": 802872,
+  "host_tests": "12 tests passed with address and undefined-behavior sanitizers; seven native captures and 45 mappings; integer-state idempotence/rollback; injected write, commit, readback and recovery failures; independent SQLite test for one-record retirement, UI visibility and unrelated-record preservation",
   "console_data_or_keys_in_source": false,
-  "helper_version": "0.1.7"
+  "helper_version": "0.1.8"
 }

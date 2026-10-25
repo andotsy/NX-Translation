@@ -48,11 +48,14 @@ including exceptions. A subsequent console scan confirms all six original
 tutorials translated. The user reports the remaining subscription article is
 still Russian. Version 0.1.6 adds its title, channel name/description, body and
 footer, with exact source hashes verified from the private capture and button
-glyphs preserved. Version 0.1.6 accepted the post but failed article readback; rollback verified the
-original. Version 0.1.7 instead uses a guarded single-file update through the
-journaled News save filesystem, leaving the index unchanged. Eleven host tests
-cover all seven captures and injected storage failures; the new device flow still
-needs console validation. No News storage reset has been performed.
+glyphs preserved. Version 0.1.6 created a local Ukrainian copy but left the original record.
+Version 0.1.7 failed to mount the News save with 0xE02 (already in use), without
+writing the article file. Version 0.1.8 compares the complete Ukrainian copy with
+the expected transformed original, then sets only the old non-local record's
+expire_at from 0 to 1 through the News service. The original expiration is backed
+up; background cleanup stays suspended through verification and possible rollback.
+The matching News UI excludes expired entries. No separate save mount or raw NAND
+access is used. Twelve host tests pass; the latest device result remains pending.
 Do not describe the full system translation as completely console-validated.
 
 ## Relevant upstream interfaces

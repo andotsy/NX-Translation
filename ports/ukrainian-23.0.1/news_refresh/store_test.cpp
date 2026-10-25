@@ -32,6 +32,15 @@ static std::string attempt(Store& store) {
     return {};
 }
 int main() {
+    { struct IntegerStore {
+        int value=0,writes=0;
+        int read() { return value; }
+        void write(int next) { value=next;++writes; }
+        void commit() {}
+      } s;
+      newsmsg::replaceVerified(s,0,1);assert(s.value==1 && s.writes==1);
+      newsmsg::replaceVerified(s,0,1);assert(s.value==1 && s.writes==1);
+      newsmsg::replaceVerified(s,1,0);assert(s.value==0 && s.writes==2); }
     { Store s;assert(attempt(s).empty());assert(s.bytes=="translated" && s.writes==1 && s.commits==1);
       assert(attempt(s).empty());assert(s.writes==1 && s.commits==1); }
     { Store s;s.bytes="changed";assert(!attempt(s).empty());assert(s.bytes=="changed" && !s.writes && !s.commits); }

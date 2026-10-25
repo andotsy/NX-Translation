@@ -8,16 +8,16 @@
   "full_build_still_requires_console_validation": true,
   "news_controls_display_ukrainian": true,
   "built_in_news_articles_display_ukrainian": false,
-  "news_article_gap": "Six tutorials confirmed translated by service scan; remaining subscription article added in helper 0.1.6, awaiting console test",
+  "news_article_gap": "Six tutorials translated; latest scan suggests a seventh Ukrainian copy plus one Russian original; helper 0.1.8 verifies the copy before retiring the original",
   "news_overlay_sd_readback_matches_package": true,
   "news_refresh_helper_built": true,
   "news_refresh_helper_offline_tests_pass": true,
   "news_refresh_helper_console_tested": false,
-  "news_refresh_helper_version": "0.1.7",
+  "news_refresh_helper_version": "0.1.8",
   "news_refresh_initial_console_result": "0.1.0 stopped on trailing zero-filled native storage padding before any post",
   "news_refresh_native_capture_regression_pass": true,
   "news_refresh_fresh_reader_required": true,
-  "news_refresh_previous_console_result": "0.1.6: one article, five text fields; accepted post but article readback mismatch; original verified on rollback",
+  "news_refresh_previous_console_result": "0.1.7: eight records, seven translated, one Russian; system-save mount failed with 0xE02; original verified unchanged",
   "news_refresh_native_records_tested": 7,
   "news_refresh_known_tutorials_tested": 7,
   "news_refresh_matching_text_fields": 30,
@@ -25,5 +25,5 @@
   "news_refresh_readers_closed_before_posting": true,
   "news_refresh_original_six_articles_console_confirmed": true,
   "news_refresh_subscription_article_pending": true,
-  "news_refresh_subscription_article_update_method": "one existing article file through journaled system-save filesystem; index unchanged; actual result pending"
+  "news_refresh_subscription_article_update_method": "verify full Ukrainian local copy, back up original expiration, expire only original non-local record through News service; cleanup suspended through verification and rollback"
 }

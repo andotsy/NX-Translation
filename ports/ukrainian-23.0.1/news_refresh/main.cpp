@@ -63,7 +63,7 @@ static Bytes readArticle(NewsRecord& record) {
     }
     return bytes;
 }
-struct Article { NewsRecord record; Bytes original,originalPayload,translated; unsigned changes; std::string backup; Bytes storedOriginal; };
+struct Article { NewsRecord record; Bytes original,originalPayload,translated; unsigned changes; std::string backup; bool retired=false; NewsRecord replacementRecord{}; };
 struct NewsPause {
     Service service{};
     NewsPause() {
@@ -72,32 +72,43 @@ struct NewsPause {
     }
     ~NewsPause() { if(service.session) serviceClose(&service); }
 };
-struct NewsFile {
-    FsFile file{};
-    ~NewsFile() { if(file.s.session) fsFileClose(&file); }
+struct NewsIndex {
+    NewsDatabaseService service{};
+    NewsIndex() { check(newsCreateNewsDatabaseService(&service),"Open News index"); }
+    ~NewsIndex() { if(service.s.session) newsDatabaseClose(&service); }
 };
-struct StoredArticle {
-    FsFileSystem fs{};
-    std::string path;
-    explicit StoredArticle(const std::string& name):path("/data/D00000000000000000000_"+name+".msgpack") {
-        check(fsOpen_SystemSaveData(&fs,FsSaveDataSpaceId_System,0x8000000000000090,AccountUid{}),"Open News article storage");
+static std::string recordFilter(const NewsRecord& record) {
+    size_t n=strnlen(record.news_id,sizeof(record.news_id));
+    if(n!=22 || record.user_id[0] || std::memcmp(record.topic_id.name,"nx_notice",10))
+        throw std::runtime_error("Unexpected tutorial record identity");
+    std::string name(record.news_id,n);
+    for(char c:name) if(!((c>='A' && c<='Z') || (c>='0' && c<='9')))
+        throw std::runtime_error("Unexpected tutorial record ID");
+    return "news_id='"+name+"' AND user_id='' AND topic_id='nx_notice'";
+}
+struct ExpiryStore {
+    NewsDatabaseService& database;
+    std::string filter;
+    uint32_t count(const std::string& condition) {
+        uint32_t result=0;
+        check(newsDatabaseCount(&database,condition.c_str(),&result),"Check News index state");
+        return result;
     }
-    ~StoredArticle() { if(fs.s.session) fsFsClose(&fs); }
-    Bytes read() {
-        NewsFile f;check(fsFsOpenFile(&fs,path.c_str(),FsOpenMode_Read,&f.file),"Open stored article for reading");
-        s64 size=0;check(fsFileGetSize(&f.file,&size),"Get stored article size");
-        if(size<=0 || size>8*1024*1024) throw std::runtime_error("Stored article size limit");
-        Bytes bytes(size);u64 got=0;
-        check(fsFileRead(&f.file,0,bytes.data(),bytes.size(),FsReadOption_None,&got),"Read stored article");
-        if(got!=bytes.size()) throw std::runtime_error("Short stored article read");
-        return bytes;
+    int32_t read() {
+        if(count(filter)!=1) throw std::runtime_error("Expected exactly one original News record");
+        if(count(filter+" AND expire_at=0")==1) return 0;
+        if(count(filter+" AND expire_at=1")==1) return 1;
+        throw std::runtime_error("Unexpected original article expiration; nothing changed");
     }
-    void write(const Bytes& bytes) {
-        NewsFile f;check(fsFsOpenFile(&fs,path.c_str(),FsOpenMode_Write|FsOpenMode_Append,&f.file),"Open stored article for writing");
-        check(fsFileSetSize(&f.file,bytes.size()),"Resize stored article");
-        check(fsFileWrite(&f.file,0,bytes.data(),bytes.size(),FsWriteOption_Flush),"Write stored article");
+    void write(int32_t value) {
+        if(value!=0 && value!=1) throw std::runtime_error("Invalid article expiration");
+        static const char column[]="expire_at";
+        check(serviceDispatchIn(&database.s,3,value,
+            .buffer_attrs={SfBufferAttr_HipcPointer|SfBufferAttr_In,SfBufferAttr_HipcPointer|SfBufferAttr_In},
+            .buffers={{column,sizeof(column)},{filter.c_str(),filter.size()+1}}),"Set original article expiration");
     }
-    void commit() { check(fsFsCommit(&fs),"Commit stored article"); }
+    // This IPC command commits in the News service before returning.
+    void commit() {}
 };
 static bool subscriptionArticle(const Article& article) {
     auto root=Parser(article.originalPayload).document();
@@ -110,37 +121,37 @@ static bool subscriptionArticle(const Article& article) {
     } else return false;
     return value==442;
 }
-static void postArticle(Article& article,const Bytes& payload) {
-    if(!subscriptionArticle(article)) {
-        check(newsPostLocalNews(payload.data(),payload.size()),"Update tutorial");
-        return;
+static void retireSubscriptionArticle(Article& article) {
+    std::string originalFilter=recordFilter(article.record);
+    std::string originalId(article.record.news_id);
+    if(originalId.substr(2)!="00000000000000000442" || originalId.substr(0,2)=="LS")
+        throw std::runtime_error("Expected the original non-local subscription record");
+    NewsIndex index;
+    const std::string copyFilter="news_id='LS00000000000000000442' AND user_id='' AND topic_id='nx_notice'";
+    NewsRecord copies[2]{};uint32_t count=0;
+    check(newsDatabaseGetList(&index.service,copies,2,copyFilter.c_str(),"",&count,0),"Locate translated subscription article");
+    if(count!=1) throw std::runtime_error("Expected exactly one translated subscription copy; nothing retired");
+    if(recordFilter(copies[0])!=copyFilter) throw std::runtime_error("Translated article record identity mismatch");
+    Bytes actual=readArticle(copies[0]);
+    if(nativeArticleBytes(actual)!=article.translated) {
+        saveNew(article.backup+".expected",article.translated);
+        saveNew(article.backup+".copy-readback",actual);
+        throw std::runtime_error("Translated copy differs; comparison saved; nothing retired");
     }
-    // PostLocalNews formats LS/LA IDs; it cannot replace the existing downloaded
-    // record. For the one hash-verified additional article, update its existing
-    // file through the journaled save filesystem. The SQLite index is untouched.
-    auto length=strnlen(article.record.news_id,sizeof(article.record.news_id));
-    if(length!=22 || article.record.user_id[0] ||
-       std::memcmp(article.record.topic_id.name,"nx_notice",10))
-        throw std::runtime_error("Unexpected stored article record");
-    std::string name(article.record.news_id,length);
-    if(name.substr(2)!="00000000000000000442" ||
-       name[0]<'A' || name[0]>'Z' || name[1]<'A' || name[1]>'Z')
-        throw std::runtime_error("Unexpected stored article filename");
-    NewsPause pause;
-    StoredArticle store(name);
-    if(article.storedOriginal.empty()) {
-        Bytes current=store.read();
-        if(nativeArticleBytes(current)!=article.originalPayload)
-            throw std::runtime_error("Stored article differs from verified News record");
-        saveNew(article.backup+".stored-file",current);
-        article.storedOriginal=std::move(current);
-    }
-    if(payload==article.originalPayload)
-        replaceVerified(store,article.translated,article.storedOriginal);
-    else {
-        if(payload!=article.translated) throw std::runtime_error("Unexpected replacement article");
-        replaceVerified(store,article.storedOriginal,payload);
-    }
+    ExpiryStore store{index.service,originalFilter};
+    if(store.read()!=0) throw std::runtime_error("Original article expiration is not zero; nothing changed");
+    std::string metadata="original_record="+originalId+"\noriginal_expire_at=0\nreplacement_record=LS00000000000000000442\n";
+    saveNew(article.backup+".index-backup",Bytes(metadata.begin(),metadata.end()));
+    replaceVerified(store,int32_t(0),int32_t(1));
+    article.retired=true;article.replacementRecord=copies[0];
+    if(store.count(originalFilter+" AND (expire_at=0 OR expire_at>=2)")!=0)
+        throw std::runtime_error("Old Russian article is still eligible for the News list");
+    if(nativeArticleBytes(readArticle(copies[0]))!=article.translated)
+        throw std::runtime_error("Translated copy changed during retirement");
+}
+static void restoreRetiredArticle(Article& article) {
+    NewsIndex index;ExpiryStore store{index.service,recordFilter(article.record)};
+    replaceVerified(store,int32_t(1),int32_t(0));article.retired=false;
 }
 static void printLog(const char* text) {
     std::printf("%s\n",text);
@@ -154,7 +165,7 @@ int main(int argc,char** argv) {
     try {
         mkdir(BASE.c_str(),0777);
         logFile=std::fopen((BASE+"/last-run.log").c_str(),"w");
-        printLog("Ukrainian News articles - 23.0.1 (helper 0.1.7)\n");
+        printLog("Ukrainian News articles - 23.0.1 (helper 0.1.8)\n");
         if (hosversionGet()!=MAKEHOSVERSION(23,0,1)) throw std::runtime_error("This build is for firmware 23.0.1 only");
         printLog("Reads existing built-in Russian tutorials. No network or keys.");
         printLog("Original articles are backed up before any change.");
@@ -162,10 +173,13 @@ int main(int argc,char** argv) {
         check(newsInitialize(NewsServiceType_Administrator),"Initialize News service");initialized=true;
         check(newsCreateNewsDatabaseService(&database),"Open News index");
         std::vector<Article> articles;unsigned scanned=0,already=0,skipped=0;size_t retained=0;
+        auto now=time(nullptr);
+        if(now<2) throw std::runtime_error("Console clock must be set before checking article expiration");
+        std::string activeFilter="(expire_at=0 OR expire_at>="+std::to_string(static_cast<long long>(now))+")";
         bool exhausted=false;
         for (unsigned page=0;page<64;++page) {
             NewsRecord records[64]{};uint32_t count=0;
-            check(newsDatabaseGetList(&database,records,64,"","",&count,page*64),"List News index");
+            check(newsDatabaseGetList(&database,records,64,activeFilter.c_str(),"",&count,page*64),"List News index");
             if (count>64) throw std::runtime_error("Invalid News count");
             scanned+=count;
             for (uint32_t i=0;i<count;++i) {
@@ -180,7 +194,7 @@ int main(int argc,char** argv) {
                 size_t needed=original.size()+payload.size()+result.data.size();
                 if (retained+needed>12*1024*1024) throw std::runtime_error("Tutorial memory limit; no updates made");
                 retained+=needed;
-                articles.push_back(Article{records[i],std::move(original),std::move(payload),std::move(result.data),result.changes,{},{}});
+                articles.push_back(Article{records[i],std::move(original),std::move(payload),std::move(result.data),result.changes,{},false,{}});
             }
             if (count<64) { exhausted=true;break; }
         }
@@ -205,7 +219,7 @@ int main(int argc,char** argv) {
             }
             printLog("All original tutorial backups saved and verified.");
             if (logFile) { std::fprintf(logFile,"Backup directory: %s\n",directory.c_str());std::fflush(logFile); }
-            std::snprintf(summary,sizeof(summary),"Ready to replace %u matching text fields. IDs/images/metadata stay unchanged.",total);printLog(summary);
+            std::snprintf(summary,sizeof(summary),"Ready: %u text changes. A verified Ukrainian copy replaces the old subscription entry.",total);printLog(summary);
             printLog("\nA: apply Ukrainian text\nB / +: exit without changes");
             consoleUpdate(nullptr);
             bool apply=false;
@@ -216,6 +230,8 @@ int main(int argc,char** argv) {
                 consoleUpdate(nullptr);
             }
             if (apply) {
+                // Keep cleanup suspended through both verification and rollback.
+                NewsPause pause;
                 unsigned posted=0,attempted=0;
                 try {
                     for(auto& article:articles) {
@@ -223,16 +239,17 @@ int main(int argc,char** argv) {
                         if (nativeArticleBytes(readArticle(article.record))!=article.originalPayload)
                             throw std::runtime_error("News changed since backup; stopping");
                         ++attempted;
-                        postArticle(article,article.translated);
+                        if(subscriptionArticle(article)) retireSubscriptionArticle(article);
+                        else check(newsPostLocalNews(article.translated.data(),article.translated.size()),"Update tutorial");
                         ++posted;
-                        Bytes actual=readArticle(article.record);
+                        Bytes actual=readArticle(article.retired?article.replacementRecord:article.record);
                         if (nativeArticleBytes(actual)!=article.translated) {
                             saveNew(article.backup+".expected",article.translated);
                             saveNew(article.backup+".readback",actual);
                             throw std::runtime_error("Article readback mismatch; exact comparison saved on SD");
                         }
                     }
-                    std::snprintf(summary,sizeof(summary),"SUCCESS: %u tutorial articles updated and read back.",posted);printLog(summary);
+                    std::snprintf(summary,sizeof(summary),"SUCCESS: %u Ukrainian articles verified; old subscription entry retired if present.",posted);printLog(summary);
                     printLog("Exit, reopen News and check the article titles and bodies.");
                     printLog("Keep the backup folder until the result is confirmed.");
                 } catch (const std::exception& error) {
@@ -242,11 +259,12 @@ int main(int argc,char** argv) {
                         auto& article=articles[i];
                         try {
                             Bytes original=nativeArticleBytes(load(article.backup));
+                            if(article.retired) restoreRetiredArticle(article);
                             bool unchanged=false;
                             try { unchanged=nativeArticleBytes(readArticle(article.record))==original; }
                             catch(const std::exception&) {}
                             if (!unchanged)
-                                postArticle(article,original);
+                                check(newsPostLocalNews(original.data(),original.size()),"Restore tutorial");
                             if (nativeArticleBytes(readArticle(article.record))==original) ++restored;
                         } catch(const std::exception&) {}
                     }
