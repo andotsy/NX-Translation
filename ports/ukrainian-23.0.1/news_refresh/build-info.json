@@ -6,9 +6,9 @@
   "libnx": "4.12.0-1",
   "switch-tools": "1.13.1-1",
   "container_digest": "sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282",
-  "nro_sha256": "cbaaa50629fc1cf12fb0f7af36f7703979009584938b7ee164061c331f588c82",
+  "nro_sha256": "07eee001f6078b7de64ae4a4f0cc6f6cd04c36f757f0208a6b83bb645d9328b6",
   "nro_bytes": 790584,
   "host_tests": "9 tests passed with address and undefined-behavior sanitizers; all seven private native records, six translated tutorials, unrelated post unchanged, changing service-buffer tails, 41 mappings and malformed inputs",
   "console_data_or_keys_in_source": false,
-  "helper_version": "0.1.4"
+  "helper_version": "0.1.5"
 }

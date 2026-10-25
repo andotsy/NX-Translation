@@ -30,7 +30,9 @@ Console photos show translated News controls with Russian built-in tutorial arti
 The LocalNews translation is already built; runtime use and retained article content
 require separate checks. The installed overlay now matches the package byte-for-byte.
 See [NEWS.md](NEWS.md), the read-only diagnose_news.py and the optional
-[News refresh helper](news_refresh/README.md), whose first console run is pending.
+[News refresh helper](news_refresh/README.md). Version 0.1.4 reached posting but was
+rejected while reader sessions held locks; version 0.1.5 fixes their lifetime and
+awaits console validation.
 
 ## Local inputs
 

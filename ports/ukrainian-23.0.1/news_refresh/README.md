@@ -6,18 +6,22 @@ The installed LocalNews overlay was read back and confirmed identical to the bui
 This makes recopying that overlay unnecessary, but does not by itself prove the
 origin of every retained article or establish the helper's device compatibility.
 
-**Status:** helper 0.1.4 compiles for Switch and passes nine host tests, including
+**Status:** helper 0.1.5 compiles for Switch and passes nine host tests, including
 all seven private native console captures. Six are recognized built-in tutorials;
 the unrelated seventh post is left untouched. All 25 nonempty text fields in the
-six tutorials match the local translation table. The post/readback flow still
-needs console validation. Earlier builds stopped before posting because native
-service-buffer bytes after the MessagePack map were treated as article data.
+six tutorials match the local translation table. Version 0.1.4 reached posting,
+but the service returned 0x127D; the one attempted article was verified unchanged.
+Version 0.1.5 closes reader sessions before posting to release the service's
+shared lock. Its post/readback flow still needs console validation. Earlier builds
+stopped because bytes after the MessagePack map were treated as article data.
 
 ## Behavior
 
 - Supports only firmware 23.0.1. Uses libnx News services; no network or keys.
 - Reads the device News index and selects non-user records from nx_notice.
-- Creates a fresh data-service object for every article read.
+- Creates a fresh data-service object for every article read and closes it before
+  returning, including on exceptions. Closes the index after enumeration. No helper
+  reader session remains open during posting or rollback.
 - Extracts the first complete MessagePack map from native News data-service buffers.
   Captures prove that bytes beyond the map can retain earlier article data, so
   they must not be posted or included in change/readback comparisons. Original
@@ -79,7 +83,7 @@ builder, never firmware or keys. See build-info.json for tool versions/hashes.
 
 Copy nx-ukrainian-news.nro and the locally generated translations.bin into
 switch/nx-ukrainian-news/ on SD. Open hbmenu normally and select **Ukrainian News
-Refresh 0.1.4**. It inspects the existing records and verifies backups first. If matching
+Refresh 0.1.5**. It inspects the existing records and verifies backups first. If matching
 tutorials are found, press **A** to apply; otherwise inspect the displayed result.
 Press **+** after the result to exit, then reopen News and check both article titles
 and their bodies. Report any error code instead of resetting system data.
@@ -99,3 +103,15 @@ with every map boundary used by the C++ adapter.
 Opening another article on the same data-service object returns 0xA7D. Every
 read therefore creates a fresh object. These findings came from read-only console
 captures; no original capture, Nintendo text or console data is committed.
+
+## Posting lock finding
+
+On the owner's 23.0.1 console, version 0.1.4 reported `Update tutorial: 0x0000127D`
+before the first post succeeded. Original readback matched the verified backup.
+Local analysis of the matching firmware identifies this result at the exclusive
+lock check before parsing the posted payload. Data-reader and database-reader
+objects hold shared locks for their lifetime, so retaining either blocks posting.
+Version 0.1.5 closes both before posting; each verification/rollback read also
+releases its reader on return. Host data tests do not validate this IPC lifecycle;
+the corrected console flow remains unconfirmed. Firmware binaries and captures
+remain private and are excluded from this repository.

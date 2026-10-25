@@ -10,7 +10,7 @@ all: $(TARGET).nro
 $(TARGET).elf: main.cpp msgpack.hpp
 	$(CXX) $(CXXFLAGS) main.cpp $(LDFLAGS) -lnx -o $@
 $(TARGET).nacp: Makefile
-	nacptool --create "Ukrainian News Refresh 0.1.4" "andotsy" "0.1.4" $@
+	nacptool --create "Ukrainian News Refresh 0.1.5" "andotsy" "0.1.5" $@
 $(TARGET).nro: $(TARGET).elf $(TARGET).nacp
 	elf2nro $(TARGET).elf $@ --nacp=$(TARGET).nacp
 

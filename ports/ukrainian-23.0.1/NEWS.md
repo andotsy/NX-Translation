@@ -39,9 +39,14 @@ Read-only console captures contain six recognized Russian tutorials and one
 unrelated post. All 25 nonempty text fields in the tutorials have translations.
 Native data-service buffers can retain earlier article bytes after the complete
 MessagePack map; each article also needs a fresh reader object. Helper 0.1.4
-frames native buffers accordingly and passes regressions against all seven
-captures. Its post/readback flow still needs console validation. No News storage
-reset or record replacement has been performed.
+passed regressions against all seven captures, but its first update returned
+0x127D. The attempted article was verified unchanged. Analysis of the matching
+firmware traces this result to the exclusive posting lock: both article readers
+and the database reader retain shared locks until their sessions close. Helper
+0.1.5 closes the index after enumeration and every article reader on return,
+including exceptions. It compiles and passes the same nine data tests; the new
+post/readback flow still needs console validation. No News storage reset or
+successful record replacement has been performed.
 Console confirmation of the article content remains outstanding. Do not describe
 the full system translation as completely console-validated.
 

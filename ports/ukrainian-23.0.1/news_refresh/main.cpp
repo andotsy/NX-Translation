@@ -41,18 +41,22 @@ static void saveNew(const std::string& path,const Bytes& data) {
 static Table loadTable() {
     return parseTable(load(BASE+"/translations.bin",1024*1024));
 }
-static Bytes readArticle(NewsDataService& data,NewsRecord& record) {
-    // A News data service can open one article. Reusing an opened object fails
-    // with 0xA7D on the tested console, so every read gets a fresh object.
-    if (data.s.session) newsDataClose(&data);
-    check(newsCreateNewsDataService(&data),"Create News article reader");
-    check(newsDataOpenWithNewsRecord(&data,&record),"Open News article");
-    uint64_t size=0;check(newsDataGetSize(&data,&size),"Read News size");
+struct ArticleReader {
+    NewsDataService service{};
+    ~ArticleReader() { if (service.s.session) newsDataClose(&service); }
+};
+static Bytes readArticle(NewsRecord& record) {
+    // Readers hold the service's shared lock until their sessions close. Give
+    // each read its own scope so a later post can acquire the exclusive lock.
+    ArticleReader reader;
+    check(newsCreateNewsDataService(&reader.service),"Create News article reader");
+    check(newsDataOpenWithNewsRecord(&reader.service,&record),"Open News article");
+    uint64_t size=0;check(newsDataGetSize(&reader.service,&size),"Read News size");
     if (!size || size>8*1024*1024) throw std::runtime_error("News article size limit");
     Bytes bytes(size);uint64_t pos=0;
     while (pos<size) {
         uint64_t read=0;
-        check(newsDataRead(&data,&read,pos,bytes.data()+pos,size-pos),"Read News article");
+        check(newsDataRead(&reader.service,&read,pos,bytes.data()+pos,size-pos),"Read News article");
         if (!read || read>size-pos) throw std::runtime_error("Short News article read");
         pos+=read;
     }
@@ -67,11 +71,11 @@ int main(int argc,char** argv) {
     (void)argc;(void)argv;
     consoleInit(nullptr);
     PadState pad;padConfigureInput(1,HidNpadStyleSet_NpadStandard);padInitializeDefault(&pad);
-    bool initialized=false;NewsDatabaseService database{};NewsDataService data{};
+    bool initialized=false;NewsDatabaseService database{};
     try {
         mkdir(BASE.c_str(),0777);
         logFile=std::fopen((BASE+"/last-run.log").c_str(),"w");
-        printLog("Ukrainian News tutorials - 23.0.1 (helper 0.1.4)\n");
+        printLog("Ukrainian News tutorials - 23.0.1 (helper 0.1.5)\n");
         if (hosversionGet()!=MAKEHOSVERSION(23,0,1)) throw std::runtime_error("This build is for firmware 23.0.1 only");
         printLog("Reads existing built-in Russian tutorials. No network or keys.");
         printLog("Original articles are backed up before any change.");
@@ -88,7 +92,7 @@ int main(int argc,char** argv) {
             for (uint32_t i=0;i<count;++i) {
                 if (strnlen(records[i].topic_id.name,sizeof(records[i].topic_id.name))!=9 ||
                     std::memcmp(records[i].topic_id.name,"nx_notice",9) || records[i].user_id[0]) continue;
-                Bytes original=readArticle(data,records[i]);
+                Bytes original=readArticle(records[i]);
                 if (retained+original.size()>12*1024*1024) throw std::runtime_error("Tutorial memory limit; no updates made");
                 Bytes payload=nativeArticleBytes(original);
                 RewriteResult result=translate(payload,table);
@@ -102,6 +106,9 @@ int main(int argc,char** argv) {
             if (count<64) { exhausted=true;break; }
         }
         if (!exhausted) throw std::runtime_error("News listing limit; no updates made");
+        // The index also holds a shared lock, even between individual queries.
+        // It is no longer needed after enumeration and must close before posts.
+        newsDatabaseClose(&database);
         char summary[160];std::snprintf(summary,sizeof(summary),"Scanned %u records; %zu tutorials need translation; %u already translated.",scanned,articles.size(),already);printLog(summary);
         std::snprintf(summary,sizeof(summary),"Other built-in records skipped: %u. Other channels unchanged.",skipped);printLog(summary);
         if (!articles.empty()) {
@@ -134,12 +141,12 @@ int main(int argc,char** argv) {
                 try {
                     for(auto& article:articles) {
                         if (load(article.backup)!=article.original) throw std::runtime_error("Backup changed; stopping");
-                        if (nativeArticleBytes(readArticle(data,article.record))!=article.originalPayload)
+                        if (nativeArticleBytes(readArticle(article.record))!=article.originalPayload)
                             throw std::runtime_error("News changed since backup; stopping");
                         ++attempted;
                         check(newsPostLocalNews(article.translated.data(),article.translated.size()),"Update tutorial");
                         ++posted;
-                        Bytes actual=readArticle(data,article.record);
+                        Bytes actual=readArticle(article.record);
                         if (nativeArticleBytes(actual)!=article.translated) throw std::runtime_error("Article readback mismatch");
                     }
                     std::snprintf(summary,sizeof(summary),"SUCCESS: %u tutorial articles updated and read back.",posted);printLog(summary);
@@ -153,11 +160,11 @@ int main(int argc,char** argv) {
                         try {
                             Bytes original=nativeArticleBytes(load(article.backup));
                             bool unchanged=false;
-                            try { unchanged=nativeArticleBytes(readArticle(data,article.record))==original; }
+                            try { unchanged=nativeArticleBytes(readArticle(article.record))==original; }
                             catch(const std::exception&) {}
                             if (!unchanged)
                                 check(newsPostLocalNews(original.data(),original.size()),"Restore tutorial");
-                            if (nativeArticleBytes(readArticle(data,article.record))==original) ++restored;
+                            if (nativeArticleBytes(readArticle(article.record))==original) ++restored;
                         } catch(const std::exception&) {}
                     }
                     std::snprintf(summary,sizeof(summary),"Originals verified for %u of %u attempted articles. Keep backups and last-run.log.",restored,attempted);printLog(summary);
@@ -165,7 +172,6 @@ int main(int argc,char** argv) {
             } else printLog("Exited without changing News articles.");
         } else printLog("No matching Russian tutorials need changes. Nothing written to News.");
     } catch (const std::exception& error) { printLog(error.what());printLog("Stopped. No unverified changes will be attempted."); }
-    if (data.s.session) newsDataClose(&data);
     if (database.s.session) newsDatabaseClose(&database);
     if (initialized) newsExit();
     printLog("\nPress + to return to hbmenu.");
