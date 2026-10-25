@@ -23,12 +23,14 @@ class RefreshTests(unittest.TestCase):
         cls.tool = WORK / 'news-refresh-host-test'
         subprocess.run(['clang++', '-std=c++17', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
                         '-fsanitize=address,undefined', str(cls.folder / 'host_test.cpp'), '-o', str(cls.tool)], check=True)
-        cls.table = OUTPUT / 'news-refresh/translations.bin'
+        cls.table = OUTPUT / 'news-refresh/translations-0.1.6.bin'
         data = cls.table.read_bytes()
-        assert data[:8] == b'NXUKNEWS' and struct.unpack_from('<I', data, 8)[0] == 41
+        assert data[:8] == b'NXUKNEWS'
+        count = struct.unpack_from('<I', data, 8)[0]
+        assert count in (41, 45)
         cls.rows = []
         pos = 12
-        for _ in range(41):
+        for _ in range(count):
             flags, a, b = struct.unpack_from('<III', data, pos)
             pos += 12
             source = data[pos:pos + a].decode(); pos += a
@@ -65,6 +67,7 @@ class RefreshTests(unittest.TestCase):
                 article = self.article()
                 article['body']['text'] = source
                 article['footer']['text'] = source
+                article['topic_description'] = source
                 article['more'] = {'system_applet': {'type': 4, 'text': source}}
                 article['opaque_text'] = source
                 article['array'] = [source, {'text': source}]
@@ -72,10 +75,11 @@ class RefreshTests(unittest.TestCase):
                 expected = copy.deepcopy(article)
                 expected['subject']['text'] = self.target
                 expected['body']['text'] = expected['footer']['text'] = target
+                expected['topic_description'] = target
                 expected['more']['system_applet']['text'] = target
                 report, raw = self.call(msgpack.packb(article, use_bin_type=True))
                 self.assertTrue(report['tutorial'])
-                self.assertEqual(report['changes'], 4)
+                self.assertEqual(report['changes'], 5)
                 actual = msgpack.unpackb(raw, raw=False, strict_map_key=False)
                 self.assertEqual(actual, expected)
                 again, second = self.call(raw)
@@ -111,6 +115,14 @@ class RefreshTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=WORK) as tmp:
             p = Path(tmp) / 'bad-table'; p.write_bytes(self.table.read_bytes()[:-1])
             self.call(raw, valid=False, table=p)
+
+    def test_stored_article_update_and_failure_recovery(self):
+        with tempfile.TemporaryDirectory(dir=WORK) as tmp:
+            tool = Path(tmp) / 'store-test'
+            subprocess.run(['clang++', '-std=c++17', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
+                            '-fsanitize=address,undefined', str(self.folder / 'store_test.cpp'),
+                            '-o', str(tool)], check=True)
+            subprocess.run([str(tool)], check=True, capture_output=True, text=True)
 
     def test_zero_padded_news_storage_is_translated_as_one_serialized_map(self):
         original = self.article()
@@ -155,7 +167,7 @@ class RefreshTests(unittest.TestCase):
         self.assertGreaterEqual(len(captures), 7)
         table = {source: target for source, target, _ in self.rows}
         subjects = {source for source, _, flags in self.rows if flags}
-        allowed = {'topic_name', 'subject.text', 'body.text', 'footer.text',
+        allowed = {'topic_name', 'topic_description', 'subject.text', 'body.text', 'footer.text',
                    'more.system_applet.text', 'more.text'}
 
         def expected_value(value, path=''):
@@ -202,8 +214,8 @@ class RefreshTests(unittest.TestCase):
                 repeated, unchanged = self.call(returned, native=True)
                 self.assertEqual(repeated['changes'], 0)
                 self.assertEqual(unchanged, after)
-        self.assertEqual(translated, 6)
-        self.assertEqual(untouched, 1)
+        self.assertEqual(translated, 7 if len(self.rows) == 45 else 6)
+        self.assertEqual(untouched, 0 if len(self.rows) == 45 else 1)
         self.assertEqual(nonzero_tails, 4)
 
     @unittest.skipUnless(os.environ.get('NX_NEWS_CAPTURE'), 'private console sample not provided')
@@ -216,7 +228,7 @@ class RefreshTests(unittest.TestCase):
         self.assertGreater(len(raw), consumed)
         self.assertFalse(any(raw[consumed:]))
         table = {source: target for source, target, _ in self.rows}
-        allowed = {'topic_name', 'subject.text', 'body.text', 'footer.text',
+        allowed = {'topic_name', 'topic_description', 'subject.text', 'body.text', 'footer.text',
                    'more.system_applet.text', 'more.text'}
 
         def expected_value(value, path=''):
@@ -237,6 +249,40 @@ class RefreshTests(unittest.TestCase):
         report, again = self.call(after + b'\0' * (len(raw) - len(after)))
         self.assertEqual(report['changes'], 0)
         self.assertEqual(again, after)
+
+    @unittest.skipUnless(os.environ.get('NX_NEWS_CAPTURE_DIR'), 'private console capture set not provided')
+    def test_subscription_article_text_complete_images_metadata_and_glyphs_preserved(self):
+        if len(self.rows) != 45:
+            self.skipTest('additional article translations not included')
+        captures = Path(os.environ['NX_NEWS_CAPTURE_DIR']).glob('article-*.bin')
+        original = None
+        for capture in captures:
+            unpacker = msgpack.Unpacker(raw=False, strict_map_key=False)
+            unpacker.feed(capture.read_bytes())
+            candidate = unpacker.unpack()
+            if candidate.get('news_id') == 442:
+                original = candidate
+                break
+        self.assertIsNotNone(original)
+        expected = copy.deepcopy(original)
+        translations = {source: target for source, target, _ in self.rows}
+        paths = ['subject.text', 'topic_name', 'topic_description', 'body.text', 'footer.text']
+        for path in paths:
+            target = expected
+            for key in path.split('.')[:-1]:
+                target = target[key]
+            key = path.split('.')[-1]
+            source = target[key]
+            self.assertIn(source, translations)
+            target[key] = translations[source]
+            self.assertEqual(sorted(c for c in source if '\ue000' <= c <= '\uf8ff'),
+                             sorted(c for c in target[key] if '\ue000' <= c <= '\uf8ff'))
+        report, after = self.call(msgpack.packb(original, use_bin_type=True))
+        self.assertEqual(report['changes'], 5)
+        self.assertEqual(msgpack.unpackb(after, raw=False), expected)
+        repeated, unchanged = self.call(after)
+        self.assertEqual(repeated['changes'], 0)
+        self.assertEqual(unchanged, after)
 
 
 if __name__ == '__main__':

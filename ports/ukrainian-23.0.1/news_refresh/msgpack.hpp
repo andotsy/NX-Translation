@@ -100,7 +100,7 @@ inline Table parseTable(const Bytes& b) {
         if(p+4>b.size()) throw std::runtime_error("Truncated translation table");
         uint32_t v=b[p]|uint32_t(b[p+1])<<8|uint32_t(b[p+2])<<16|uint32_t(b[p+3])<<24;p+=4;return v;
     };
-    auto count=integer();if(count!=41) throw std::runtime_error("Unexpected translation count");
+    auto count=integer();if(count!=41 && count!=45) throw std::runtime_error("Unexpected translation count");
     Table table;
     for(uint32_t i=0;i<count;++i) {
         auto flags=integer(),a=integer(),c=integer();
@@ -124,7 +124,7 @@ inline void putString(Bytes& out,const std::string& value) {
     out.insert(out.end(),value.begin(),value.end());
 }
 inline bool allowed(const std::string& path) {
-    return path=="topic_name" || path=="subject.text" || path=="body.text" ||
+    return path=="topic_name" || path=="topic_description" || path=="subject.text" || path=="body.text" ||
            path=="footer.text" || path=="more.system_applet.text" || path=="more.text";
 }
 inline void rewrite(const Node& n,const Bytes& in,Bytes& out,const Table& table,

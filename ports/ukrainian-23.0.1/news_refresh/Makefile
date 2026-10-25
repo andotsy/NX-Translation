@@ -7,10 +7,10 @@ CXXFLAGS := -O2 -g0 -Wall -Wextra -Werror -std=gnu++17 -march=armv8-a+crc+crypto
 LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs -g0 -march=armv8-a+crc+crypto -mtp=soft -Wl,--gc-sections -L$(DEVKITPRO)/libnx/lib
 
 all: $(TARGET).nro
-$(TARGET).elf: main.cpp msgpack.hpp
+$(TARGET).elf: main.cpp msgpack.hpp verified_store.hpp
 	$(CXX) $(CXXFLAGS) main.cpp $(LDFLAGS) -lnx -o $@
 $(TARGET).nacp: Makefile
-	nacptool --create "Ukrainian News Refresh 0.1.5" "andotsy" "0.1.5" $@
+	nacptool --create "Ukrainian News Refresh 0.1.7" "andotsy" "0.1.7" $@
 $(TARGET).nro: $(TARGET).elf $(TARGET).nacp
 	elf2nro $(TARGET).elf $@ --nacp=$(TARGET).nacp
 

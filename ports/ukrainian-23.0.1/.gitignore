@@ -15,4 +15,5 @@ news_refresh/*.nro
 news_refresh/*.nacp
 news_refresh/host_test
 news_refresh/translations.bin
+news_refresh/translations-*.bin
 news_refresh/backup-*/

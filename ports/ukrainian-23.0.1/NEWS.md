@@ -35,8 +35,8 @@ Next steps:
 
 The installed SD resource has now been verified byte-for-byte against the package.
 An optional [News refresh helper](news_refresh/README.md) is built and tested offline.
-Read-only console captures contain six recognized Russian tutorials and one
-unrelated post. All 25 nonempty text fields in the tutorials have translations.
+Console captures contain six Russian tutorials and one channel-subscription
+article. The original six tutorials have 25 nonempty translated text fields.
 Native data-service buffers can retain earlier article bytes after the complete
 MessagePack map; each article also needs a fresh reader object. Helper 0.1.4
 passed regressions against all seven captures, but its first update returned
@@ -44,11 +44,16 @@ passed regressions against all seven captures, but its first update returned
 firmware traces this result to the exclusive posting lock: both article readers
 and the database reader retain shared locks until their sessions close. Helper
 0.1.5 closes the index after enumeration and every article reader on return,
-including exceptions. It compiles and passes the same nine data tests; the new
-post/readback flow still needs console validation. No News storage reset or
-successful record replacement has been performed.
-Console confirmation of the article content remains outstanding. Do not describe
-the full system translation as completely console-validated.
+including exceptions. A subsequent console scan confirms all six original
+tutorials translated. The user reports the remaining subscription article is
+still Russian. Version 0.1.6 adds its title, channel name/description, body and
+footer, with exact source hashes verified from the private capture and button
+glyphs preserved. Version 0.1.6 accepted the post but failed article readback; rollback verified the
+original. Version 0.1.7 instead uses a guarded single-file update through the
+journaled News save filesystem, leaving the index unchanged. Eleven host tests
+cover all seven captures and injected storage failures; the new device flow still
+needs console validation. No News storage reset has been performed.
+Do not describe the full system translation as completely console-validated.
 
 ## Relevant upstream interfaces
 

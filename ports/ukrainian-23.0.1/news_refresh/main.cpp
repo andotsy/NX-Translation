@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "msgpack.hpp"
+#include "verified_store.hpp"
 
 using namespace newsmsg;
 static const std::string BASE="sdmc:/switch/nx-ukrainian-news";
@@ -39,7 +40,7 @@ static void saveNew(const std::string& path,const Bytes& data) {
     if (!good || load(path)!=data) throw std::runtime_error("Backup verification failed; nothing posted");
 }
 static Table loadTable() {
-    return parseTable(load(BASE+"/translations.bin",1024*1024));
+    return parseTable(load(BASE+"/translations-0.1.6.bin",1024*1024));
 }
 struct ArticleReader {
     NewsDataService service{};
@@ -62,7 +63,85 @@ static Bytes readArticle(NewsRecord& record) {
     }
     return bytes;
 }
-struct Article { NewsRecord record; Bytes original,originalPayload,translated; unsigned changes; std::string backup; };
+struct Article { NewsRecord record; Bytes original,originalPayload,translated; unsigned changes; std::string backup; Bytes storedOriginal; };
+struct NewsPause {
+    Service service{};
+    NewsPause() {
+        check(serviceDispatch(newsGetServiceSession(),50100,
+              .out_num_objects=1,.out_objects=&service),"Suspend background News tasks");
+    }
+    ~NewsPause() { if(service.session) serviceClose(&service); }
+};
+struct NewsFile {
+    FsFile file{};
+    ~NewsFile() { if(file.s.session) fsFileClose(&file); }
+};
+struct StoredArticle {
+    FsFileSystem fs{};
+    std::string path;
+    explicit StoredArticle(const std::string& name):path("/data/D00000000000000000000_"+name+".msgpack") {
+        check(fsOpen_SystemSaveData(&fs,FsSaveDataSpaceId_System,0x8000000000000090,AccountUid{}),"Open News article storage");
+    }
+    ~StoredArticle() { if(fs.s.session) fsFsClose(&fs); }
+    Bytes read() {
+        NewsFile f;check(fsFsOpenFile(&fs,path.c_str(),FsOpenMode_Read,&f.file),"Open stored article for reading");
+        s64 size=0;check(fsFileGetSize(&f.file,&size),"Get stored article size");
+        if(size<=0 || size>8*1024*1024) throw std::runtime_error("Stored article size limit");
+        Bytes bytes(size);u64 got=0;
+        check(fsFileRead(&f.file,0,bytes.data(),bytes.size(),FsReadOption_None,&got),"Read stored article");
+        if(got!=bytes.size()) throw std::runtime_error("Short stored article read");
+        return bytes;
+    }
+    void write(const Bytes& bytes) {
+        NewsFile f;check(fsFsOpenFile(&fs,path.c_str(),FsOpenMode_Write|FsOpenMode_Append,&f.file),"Open stored article for writing");
+        check(fsFileSetSize(&f.file,bytes.size()),"Resize stored article");
+        check(fsFileWrite(&f.file,0,bytes.data(),bytes.size(),FsWriteOption_Flush),"Write stored article");
+    }
+    void commit() { check(fsFsCommit(&fs),"Commit stored article"); }
+};
+static bool subscriptionArticle(const Article& article) {
+    auto root=Parser(article.originalPayload).document();
+    auto id=field(root,article.originalPayload,"news_id");
+    if(!id) return false;
+    uint64_t value=0;
+    if(id->tag<=0x7f) value=id->tag;
+    else if(id->tag>=0xcc && id->tag<=0xcf) {
+        for(size_t i=id->payload;i<id->end;++i) value=(value<<8)|article.originalPayload[i];
+    } else return false;
+    return value==442;
+}
+static void postArticle(Article& article,const Bytes& payload) {
+    if(!subscriptionArticle(article)) {
+        check(newsPostLocalNews(payload.data(),payload.size()),"Update tutorial");
+        return;
+    }
+    // PostLocalNews formats LS/LA IDs; it cannot replace the existing downloaded
+    // record. For the one hash-verified additional article, update its existing
+    // file through the journaled save filesystem. The SQLite index is untouched.
+    auto length=strnlen(article.record.news_id,sizeof(article.record.news_id));
+    if(length!=22 || article.record.user_id[0] ||
+       std::memcmp(article.record.topic_id.name,"nx_notice",10))
+        throw std::runtime_error("Unexpected stored article record");
+    std::string name(article.record.news_id,length);
+    if(name.substr(2)!="00000000000000000442" ||
+       name[0]<'A' || name[0]>'Z' || name[1]<'A' || name[1]>'Z')
+        throw std::runtime_error("Unexpected stored article filename");
+    NewsPause pause;
+    StoredArticle store(name);
+    if(article.storedOriginal.empty()) {
+        Bytes current=store.read();
+        if(nativeArticleBytes(current)!=article.originalPayload)
+            throw std::runtime_error("Stored article differs from verified News record");
+        saveNew(article.backup+".stored-file",current);
+        article.storedOriginal=std::move(current);
+    }
+    if(payload==article.originalPayload)
+        replaceVerified(store,article.translated,article.storedOriginal);
+    else {
+        if(payload!=article.translated) throw std::runtime_error("Unexpected replacement article");
+        replaceVerified(store,article.storedOriginal,payload);
+    }
+}
 static void printLog(const char* text) {
     std::printf("%s\n",text);
     if (logFile) { std::fprintf(logFile,"%s\n",text);std::fflush(logFile); }
@@ -75,7 +154,7 @@ int main(int argc,char** argv) {
     try {
         mkdir(BASE.c_str(),0777);
         logFile=std::fopen((BASE+"/last-run.log").c_str(),"w");
-        printLog("Ukrainian News tutorials - 23.0.1 (helper 0.1.5)\n");
+        printLog("Ukrainian News articles - 23.0.1 (helper 0.1.7)\n");
         if (hosversionGet()!=MAKEHOSVERSION(23,0,1)) throw std::runtime_error("This build is for firmware 23.0.1 only");
         printLog("Reads existing built-in Russian tutorials. No network or keys.");
         printLog("Original articles are backed up before any change.");
@@ -101,7 +180,7 @@ int main(int argc,char** argv) {
                 size_t needed=original.size()+payload.size()+result.data.size();
                 if (retained+needed>12*1024*1024) throw std::runtime_error("Tutorial memory limit; no updates made");
                 retained+=needed;
-                articles.push_back(Article{records[i],std::move(original),std::move(payload),std::move(result.data),result.changes,{}});
+                articles.push_back(Article{records[i],std::move(original),std::move(payload),std::move(result.data),result.changes,{},{}});
             }
             if (count<64) { exhausted=true;break; }
         }
@@ -144,10 +223,14 @@ int main(int argc,char** argv) {
                         if (nativeArticleBytes(readArticle(article.record))!=article.originalPayload)
                             throw std::runtime_error("News changed since backup; stopping");
                         ++attempted;
-                        check(newsPostLocalNews(article.translated.data(),article.translated.size()),"Update tutorial");
+                        postArticle(article,article.translated);
                         ++posted;
                         Bytes actual=readArticle(article.record);
-                        if (nativeArticleBytes(actual)!=article.translated) throw std::runtime_error("Article readback mismatch");
+                        if (nativeArticleBytes(actual)!=article.translated) {
+                            saveNew(article.backup+".expected",article.translated);
+                            saveNew(article.backup+".readback",actual);
+                            throw std::runtime_error("Article readback mismatch; exact comparison saved on SD");
+                        }
                     }
                     std::snprintf(summary,sizeof(summary),"SUCCESS: %u tutorial articles updated and read back.",posted);printLog(summary);
                     printLog("Exit, reopen News and check the article titles and bodies.");
@@ -163,7 +246,7 @@ int main(int argc,char** argv) {
                             try { unchanged=nativeArticleBytes(readArticle(article.record))==original; }
                             catch(const std::exception&) {}
                             if (!unchanged)
-                                check(newsPostLocalNews(original.data(),original.size()),"Restore tutorial");
+                                postArticle(article,original);
                             if (nativeArticleBytes(readArticle(article.record))==original) ++restored;
                         } catch(const std::exception&) {}
                     }
