@@ -16,7 +16,8 @@ The system locale remains Russian; games can continue following that language.
   exact plain-text upstream YAML matches, and retained 14 nonlinguistic records.
 - Added 87 distinct Ukrainian translations covering 191 remaining record instances.
 - Built local full and user-selection pilot ZIPs; all 11,108 record instances resolved.
-- Offline checks pass. **The candidate has not been tested on a console.**
+- Offline checks pass. **The system user-selection pilot is confirmed working on a console.**
+  The reported prompt is “Хто користується програмою”. Full HOME/Settings testing remains outstanding.
 
 No keys, firmware NCAs, extracted original resources, generated translation catalog,
 console identifiers or local paths are included. This directory contains the new

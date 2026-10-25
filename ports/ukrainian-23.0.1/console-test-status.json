@@ -1,0 +1,9 @@
+{
+  "firmware": "23.0.1",
+  "locale_replaced": "EUru",
+  "pilot_title": "0100000000001007",
+  "pilot_user_selection_displays_ukrainian": true,
+  "confirmed_prompt": "Хто користується програмою",
+  "full_home_and_settings_tested": false,
+  "full_build_still_requires_console_validation": true
+}
