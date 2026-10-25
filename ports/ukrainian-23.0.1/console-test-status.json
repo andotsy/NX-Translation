@@ -13,8 +13,13 @@
   "news_refresh_helper_built": true,
   "news_refresh_helper_offline_tests_pass": true,
   "news_refresh_helper_console_tested": false,
-  "news_refresh_helper_version": "0.1.2",
+  "news_refresh_helper_version": "0.1.4",
   "news_refresh_initial_console_result": "0.1.0 stopped on trailing zero-filled native storage padding before any post",
   "news_refresh_native_capture_regression_pass": true,
-  "news_refresh_fresh_reader_required": true
+  "news_refresh_fresh_reader_required": true,
+  "news_refresh_previous_console_result": "0.1.2 stopped before updates on nonzero stale data after the native MessagePack map",
+  "news_refresh_native_records_tested": 7,
+  "news_refresh_known_tutorials_tested": 6,
+  "news_refresh_matching_text_fields": 25,
+  "news_refresh_unknown_post_untouched": true
 }

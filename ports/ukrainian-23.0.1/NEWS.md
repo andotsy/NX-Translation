@@ -34,13 +34,14 @@ Next steps:
    it must not clear the whole News database or alter subscriptions to repair text.
 
 The installed SD resource has now been verified byte-for-byte against the package.
-An optional [News refresh helper](news_refresh/README.md) is built and tested offline;
-the initial console run stopped on zero-filled native storage padding before
-posting. A read-only inspection captured one built-in Russian article and found
-that each read also needs a fresh data-service object. Helper 0.1.2 addresses both
-and passes a regression test using the private capture. Its post/readback flow
-still needs console validation. No News storage reset or record replacement has
-been performed.
+An optional [News refresh helper](news_refresh/README.md) is built and tested offline.
+Read-only console captures contain six recognized Russian tutorials and one
+unrelated post. All 25 nonempty text fields in the tutorials have translations.
+Native data-service buffers can retain earlier article bytes after the complete
+MessagePack map; each article also needs a fresh reader object. Helper 0.1.4
+frames native buffers accordingly and passes regressions against all seven
+captures. Its post/readback flow still needs console validation. No News storage
+reset or record replacement has been performed.
 Console confirmation of the article content remains outstanding. Do not describe
 the full system translation as completely console-validated.
 

@@ -37,11 +37,14 @@ class RefreshTests(unittest.TestCase):
         assert pos == len(data)
         cls.source, cls.target, _ = next(row for row in cls.rows if row[2])
 
-    def call(self, raw, valid=True, table=None):
+    def call(self, raw, valid=True, table=None, native=False):
         with tempfile.TemporaryDirectory(dir=WORK) as tmp:
             root = Path(tmp)
             (root / 'input').write_bytes(raw)
-            r = subprocess.run([str(self.tool), str(table or self.table), str(root / 'input'), str(root / 'output')],
+            command = [str(self.tool), str(table or self.table), str(root / 'input'), str(root / 'output')]
+            if native:
+                command.append('--native-buffer')
+            r = subprocess.run(command,
                                capture_output=True, text=True)
             if valid:
                 self.assertEqual(r.returncode, 0, r.stderr)
@@ -128,6 +131,80 @@ class RefreshTests(unittest.TestCase):
             self.call(raw + suffix, valid=False)
         for raw in [b'\0' * 1024, b'\x90', b'\xa1x', b'\xc0']:
             self.call(raw, valid=False)
+            self.call(raw, valid=False, native=True)
+
+    def test_native_buffers_with_previous_article_bytes_preserve_current_article(self):
+        previous = self.article()
+        previous['body']['old_article_only'] = b'old image and text' * 4096
+        previous = msgpack.packb(previous, use_bin_type=True)
+        current = self.article()
+        current['body'] = {'text': self.source, 'main_image': b'short image'}
+        raw = msgpack.packb(current, use_bin_type=True)
+        buffer = raw + previous[len(raw):]
+        self.assertGreater(len(buffer), len(raw))
+        self.call(buffer, valid=False)
+        report, after = self.call(buffer, native=True)
+        expected = copy.deepcopy(current)
+        expected['subject']['text'] = expected['body']['text'] = self.target
+        self.assertEqual(report['payload_bytes'], len(raw))
+        self.assertEqual(msgpack.unpackb(after, raw=False), expected)
+
+    @unittest.skipUnless(os.environ.get('NX_NEWS_CAPTURE_DIR'), 'private console capture set not provided')
+    def test_all_private_native_records_and_changing_service_buffer_tails(self):
+        captures = sorted(Path(os.environ['NX_NEWS_CAPTURE_DIR']).glob('article-*.bin'))
+        self.assertGreaterEqual(len(captures), 7)
+        table = {source: target for source, target, _ in self.rows}
+        subjects = {source for source, _, flags in self.rows if flags}
+        allowed = {'topic_name', 'subject.text', 'body.text', 'footer.text',
+                   'more.system_applet.text', 'more.text'}
+
+        def expected_value(value, path=''):
+            if isinstance(value, str) and path in allowed:
+                return table.get(value, value)
+            if isinstance(value, dict):
+                return {key: expected_value(child, path + ('.' if path else '') + str(key))
+                        for key, child in value.items()}
+            if isinstance(value, list):
+                return [expected_value(child, path + '[]') for child in value]
+            return value
+
+        translated = untouched = nonzero_tails = 0
+        rng = random.Random(230104)
+        for capture in captures:
+            with self.subTest(capture=capture.name):
+                raw = capture.read_bytes()
+                unpacker = msgpack.Unpacker(raw=False, strict_map_key=False)
+                unpacker.feed(raw)
+                original = unpacker.unpack()
+                used = unpacker.tell()
+                if any(raw[used:]):
+                    nonzero_tails += 1
+                    self.call(raw, valid=False)
+                report, after = self.call(raw, native=True)
+                self.assertEqual(report['payload_bytes'], used)
+                known = original.get('language') == 'ru' and original.get('topic_id') == 'nx_notice' and original.get('subject', {}).get('text') in subjects
+                self.assertEqual(report['tutorial'], known)
+                if not known:
+                    untouched += 1
+                    self.assertEqual(after, raw)
+                    continue
+                translated += 1
+                self.assertGreater(report['changes'], 0)
+                self.assertEqual(msgpack.unpackb(after, raw=False), expected_value(original))
+                # The same article may arrive with a different buffer tail on its
+                # next read. Neither comparison nor transformation may use it.
+                altered = raw[:used] + rng.randbytes(len(raw) - used)
+                changed_tail, same_result = self.call(altered, native=True)
+                self.assertEqual(changed_tail, report)
+                self.assertEqual(same_result, after)
+                self.assertLessEqual(len(after), len(raw))
+                returned = after + raw[len(after):]
+                repeated, unchanged = self.call(returned, native=True)
+                self.assertEqual(repeated['changes'], 0)
+                self.assertEqual(unchanged, after)
+        self.assertEqual(translated, 6)
+        self.assertEqual(untouched, 1)
+        self.assertEqual(nonzero_tails, 4)
 
     @unittest.skipUnless(os.environ.get('NX_NEWS_CAPTURE'), 'private console sample not provided')
     def test_private_console_snapshot_preserves_every_untranslated_field(self):

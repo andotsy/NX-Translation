@@ -58,7 +58,7 @@ static Bytes readArticle(NewsDataService& data,NewsRecord& record) {
     }
     return bytes;
 }
-struct Article { NewsRecord record; Bytes original,translated; unsigned changes; std::string backup; };
+struct Article { NewsRecord record; Bytes original,originalPayload,translated; unsigned changes; std::string backup; };
 static void printLog(const char* text) {
     std::printf("%s\n",text);
     if (logFile) { std::fprintf(logFile,"%s\n",text);std::fflush(logFile); }
@@ -71,7 +71,7 @@ int main(int argc,char** argv) {
     try {
         mkdir(BASE.c_str(),0777);
         logFile=std::fopen((BASE+"/last-run.log").c_str(),"w");
-        printLog("Ukrainian News tutorials - 23.0.1 (helper 0.1.2)\n");
+        printLog("Ukrainian News tutorials - 23.0.1 (helper 0.1.4)\n");
         if (hosversionGet()!=MAKEHOSVERSION(23,0,1)) throw std::runtime_error("This build is for firmware 23.0.1 only");
         printLog("Reads existing built-in Russian tutorials. No network or keys.");
         printLog("Original articles are backed up before any change.");
@@ -90,11 +90,14 @@ int main(int argc,char** argv) {
                     std::memcmp(records[i].topic_id.name,"nx_notice",9) || records[i].user_id[0]) continue;
                 Bytes original=readArticle(data,records[i]);
                 if (retained+original.size()>12*1024*1024) throw std::runtime_error("Tutorial memory limit; no updates made");
-                RewriteResult result=translate(original,table);
+                Bytes payload=nativeArticleBytes(original);
+                RewriteResult result=translate(payload,table);
                 if (!result.tutorial) { ++skipped;continue; }
                 if (!result.changes) { ++already;continue; }
-                retained+=original.size();
-                articles.push_back(Article{records[i],std::move(original),std::move(result.data),result.changes,{}});
+                size_t needed=original.size()+payload.size()+result.data.size();
+                if (retained+needed>12*1024*1024) throw std::runtime_error("Tutorial memory limit; no updates made");
+                retained+=needed;
+                articles.push_back(Article{records[i],std::move(original),std::move(payload),std::move(result.data),result.changes,{}});
             }
             if (count<64) { exhausted=true;break; }
         }
@@ -131,12 +134,13 @@ int main(int argc,char** argv) {
                 try {
                     for(auto& article:articles) {
                         if (load(article.backup)!=article.original) throw std::runtime_error("Backup changed; stopping");
-                        if (readArticle(data,article.record)!=article.original) throw std::runtime_error("News changed since backup; stopping");
+                        if (nativeArticleBytes(readArticle(data,article.record))!=article.originalPayload)
+                            throw std::runtime_error("News changed since backup; stopping");
                         ++attempted;
                         check(newsPostLocalNews(article.translated.data(),article.translated.size()),"Update tutorial");
                         ++posted;
                         Bytes actual=readArticle(data,article.record);
-                        if (articleBytes(actual)!=article.translated) throw std::runtime_error("Article readback mismatch");
+                        if (nativeArticleBytes(actual)!=article.translated) throw std::runtime_error("Article readback mismatch");
                     }
                     std::snprintf(summary,sizeof(summary),"SUCCESS: %u tutorial articles updated and read back.",posted);printLog(summary);
                     printLog("Exit, reopen News and check the article titles and bodies.");
@@ -147,13 +151,13 @@ int main(int argc,char** argv) {
                     for (size_t i=0;i<attempted;++i) {
                         auto& article=articles[i];
                         try {
-                            Bytes original=articleBytes(load(article.backup));
+                            Bytes original=nativeArticleBytes(load(article.backup));
                             bool unchanged=false;
-                            try { unchanged=articleBytes(readArticle(data,article.record))==original; }
+                            try { unchanged=nativeArticleBytes(readArticle(data,article.record))==original; }
                             catch(const std::exception&) {}
                             if (!unchanged)
                                 check(newsPostLocalNews(original.data(),original.size()),"Restore tutorial");
-                            if (articleBytes(readArticle(data,article.record))==original) ++restored;
+                            if (nativeArticleBytes(readArticle(data,article.record))==original) ++restored;
                         } catch(const std::exception&) {}
                     }
                     std::snprintf(summary,sizeof(summary),"Originals verified for %u of %u attempted articles. Keep backups and last-run.log.",restored,attempted);printLog(summary);

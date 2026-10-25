@@ -82,6 +82,15 @@ inline Bytes articleBytes(const Bytes& in) {
     Node root=articleRoot(in);
     return Bytes(in.begin(),in.begin()+root.end);
 }
+// Only for buffers read from NewsDataService. Captures show that the buffer can
+// include bytes left from a previous article beyond the first complete map.
+// Such bytes are neither stable article data nor part of the serialized post.
+// Standalone MessagePack documents continue to reject nonzero trailing data.
+inline Bytes nativeArticleBytes(const Bytes& buffer) {
+    Node root=Parser(buffer).parse();
+    if (!root.map) throw std::runtime_error("Native News article root is not a map");
+    return Bytes(buffer.begin(),buffer.begin()+root.end);
+}
 struct Translation { std::string target; bool subject{}; };
 using Table=std::map<std::string,Translation>;
 inline Table parseTable(const Bytes& b) {
