@@ -127,23 +127,23 @@ class RefreshTests(unittest.TestCase):
 
     def test_retiring_original_preserves_translated_copy_and_unrelated_records(self):
         connection = sqlite3.connect(':memory:')
-        connection.execute('CREATE TABLE news (news_id TEXT,user_id TEXT,topic_id TEXT,expire_at INTEGER)')
-        old = 'DS00000000000000000442'
+        connection.execute('CREATE TABLE news (news_id TEXT,user_id TEXT,topic_id TEXT,expire_at INTEGER,opted_in INTEGER)')
+        old = 'NS00000000000000000442'
         new = 'LS00000000000000000442'
-        rows = [(old, '', 'nx_notice', 0), (new, '', 'nx_notice', 0),
-                (old, 'another-user', 'nx_notice', 0), (old, '', 'other-topic', 0),
-                ('LS00000000000000010000', '', 'nx_notice', 0)]
-        connection.executemany('INSERT INTO news VALUES (?,?,?,?)', rows)
+        rows = [(old, '', 'nx_notice', 0, 1), (new, '', 'nx_notice', 0, 1),
+                (old, 'another-user', 'nx_notice', 0, 1), (old, '', 'other-topic', 0, 1),
+                ('LS00000000000000010000', '', 'nx_notice', 0, 1)]
+        connection.executemany('INSERT INTO news VALUES (?,?,?,?,?)', rows)
         where = "news_id='%s' AND user_id='' AND topic_id='nx_notice'" % old
-        changed = connection.execute('UPDATE news SET expire_at=1 WHERE ' + where).rowcount
+        changed = connection.execute('UPDATE news SET opted_in=0 WHERE ' + where).rowcount
         self.assertEqual(changed, 1)
-        expected = [(*rows[0][:3], 1), *rows[1:]]
+        expected = [(*rows[0][:4], 0), *rows[1:]]
         self.assertEqual(connection.execute('SELECT * FROM news').fetchall(), expected)
         # This is the visibility predicate recovered from the matching News UI.
         visible = connection.execute("SELECT news_id FROM news WHERE user_id='' AND topic_id='nx_notice' "
-                                     'AND (expire_at=0 OR expire_at>=?)', (1735825327,)).fetchall()
+                                     'AND opted_in=1 AND (expire_at=0 OR expire_at>=?)', (1735825327,)).fetchall()
         self.assertEqual(visible, [(new,), ('LS00000000000000010000',)])
-        connection.execute('UPDATE news SET expire_at=0 WHERE ' + where)
+        connection.execute('UPDATE news SET opted_in=1 WHERE ' + where)
         self.assertEqual(connection.execute('SELECT * FROM news').fetchall(), rows)
         connection.close()
 

@@ -48,6 +48,17 @@ int main() {
     { Store s;s.commitFailure=true;assert(attempt(s)=="commit failed");assert(s.bytes=="original" && s.commits==2); }
     { Store s;s.wrongReadback=true;assert(attempt(s)=="Stored article readback mismatch");assert(s.bytes=="original" && s.writes==2 && s.commits==2); }
     { Store s;s.partial=true;s.restoreFailure=true;assert(attempt(s).find("restore failed")!=std::string::npos);assert(s.bytes=="partial"); }
+    { struct RejectedStore {
+        int read() { return 1; }
+        void write(int value) { throw std::runtime_error(value ? "restore: 0x1927D" : "hide: 0x1927D"); }
+        void commit() {}
+      } s;
+      try { newsmsg::replaceVerified(s,1,0);assert(false); }
+      catch(const std::exception& e) {
+        std::string message=e.what();
+        assert(message.find("restore: 0x1927D")!=std::string::npos);
+        assert(message.find("original error: hide: 0x1927D")!=std::string::npos);
+      } }
     { Store s;s.readFailure=true;assert(attempt(s)=="read failed");assert(s.bytes=="original" && !s.writes); }
     std::cout<<"Verified store: success, idempotence, stale input, partial write, commit failure, bad readback, failed restore and read failure checked\n";
 }

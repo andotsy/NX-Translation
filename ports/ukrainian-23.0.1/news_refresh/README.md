@@ -4,18 +4,17 @@ This optional firmware-23.0.1 helper translates known Russian News articles that
 remain in storage after the system overlay is installed. It uses News services;
 no keys, network, raw NAND access or separate system-save mount is needed.
 
-**Status:** version 0.1.5 translated six tutorials, confirmed by a subsequent
-console scan. Another post about subscribing to channels remained Russian.
-Version 0.1.6 posted its Ukrainian copy under a local record ID; the original
-record remained. Version 0.1.7 could not mount the News save (0xE02, already in use)
-and verified the original unchanged. Version 0.1.8 verifies the complete Ukrainian
-copy and retires only the old Russian entry through the News database service.
-The new device flow remains unconfirmed. Twelve host tests pass.
+**Status:** six tutorials and the Ukrainian subscription article have been
+confirmed on the console. A Russian duplicate remains. Version 0.1.9 verified
+its Ukrainian counterpart but failed when changing expiration: the firmware's
+integer-update allowlist excludes expire_at. Version 0.1.10 uses the supported
+per-record opted_in flag to hide only the original. Installed; console validation
+is pending. Twelve host tests pass.
 
 ## Behavior
 
 - Supports only firmware 23.0.1 and the underlying Russian system language.
-- Enumerates active non-user nx_notice records. Unrecognized subjects are skipped.
+- Enumerates visible, active non-user nx_notice records. Unrecognized subjects are skipped.
 - Opens and closes a fresh reader for every read; closes the enumeration index
   before posting. Native service buffers may contain stale bytes after the first
   complete MessagePack map. Only that map is rewritten or compared; full returned
@@ -28,13 +27,13 @@ The new device flow remains unconfirmed. Twelve host tests pass.
 - For the remaining subscription article (numeric ID 442), requires exactly one
   local Ukrainian copy. Its entire serialized map must equal the expected
   transformation of the original, including all images and metadata. It changes
-  only expire_at from 0 to 1 on the original non-local record, selected by exact
-  record ID, empty user ID and nx_notice topic. The original expiration and both
-  record IDs are backed up on SD. No subscriptions or unrelated records change.
+  only opted_in from 1 to 0 on the original non-local record, selected by exact
+  record ID, empty user ID and nx_notice topic. The original visibility flag and both
+  record IDs are backed up on SD. No channel subscription settings or unrelated records change.
 - Holds background-task suspension through update, verification and rollback.
-  Verifies the original is expired and the Ukrainian copy is unchanged. On failure,
-  restores and verifies the previous expiration. The ordinary News UI expiration
-  predicate excludes the old entry; normal cleanup may later remove it.
+  Verifies the original is hidden and the Ukrainian copy is unchanged. On failure,
+  restores and verifies the previous visibility flag. The News UI requires
+  opted_in=1, so the old entry is excluded without deleting its article data.
 - Saves expected and actual bytes privately on SD if article readback differs.
 - Never resets News, clears subscriptions or removes system-save directories.
 
@@ -74,9 +73,9 @@ with network disabled. Only helper source is sent to the builder. See build-info
 
 ## Console use
 
-Copy the NRO to switch/nx-ukrainian-news-0.1.8.nro and the generated
+Copy the NRO to switch/nx-ukrainian-news-0.1.10.nro and the generated
 translations-0.1.6.bin to switch/nx-ukrainian-news/. Open hbmenu using the console's
-existing configuration and select **Ukrainian News Refresh 0.1.8**. Press **A** after
+existing configuration and select **Ukrainian News Refresh 0.1.10**. Press **A** after
 backup verification, or **B / +** to exit without changes. After SUCCESS, press **+**,
 reopen News and verify titles and bodies. Report errors without resetting data.
 
@@ -84,7 +83,9 @@ reopen News and verify titles and bodies. Report errors without resetting data.
 
 The native posting path formats local LS/LA record IDs; it does not replace a
 non-local article's existing record. The matching News UI filters include
-`expire_at=0 OR expire_at>=current_time`. The News database's UpdateIntegerValue
-command commits updates in its owning service. These observations motivated the
-verified-copy retirement approach. Matching firmware and private captures stay
+`opted_in=1 AND (expire_at=0 OR expire_at>=current_time)`. The News database's
+UpdateIntegerValue command checks a writable-column allowlist before executing
+SQL: opted_in is permitted; expire_at is rejected. The service commits accepted
+updates before returning. The helper logs the native result before rollback and
+preserves both errors if rollback also fails. Matching firmware and private captures stay
 local and are excluded from this repository.

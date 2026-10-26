@@ -86,7 +86,7 @@ static std::string recordFilter(const NewsRecord& record) {
         throw std::runtime_error("Unexpected tutorial record ID");
     return "news_id='"+name+"' AND user_id='' AND topic_id='nx_notice'";
 }
-struct ExpiryStore {
+struct VisibilityStore {
     NewsDatabaseService& database;
     std::string filter;
     uint32_t count(const std::string& condition) {
@@ -96,16 +96,23 @@ struct ExpiryStore {
     }
     int32_t read() {
         if(count(filter)!=1) throw std::runtime_error("Expected exactly one original News record");
-        if(count(filter+" AND expire_at=0")==1) return 0;
-        if(count(filter+" AND expire_at=1")==1) return 1;
-        throw std::runtime_error("Unexpected original article expiration; nothing changed");
+        if(count(filter+" AND opted_in=0")==1) return 0;
+        if(count(filter+" AND opted_in=1")==1) return 1;
+        throw std::runtime_error("Unexpected original article visibility; nothing changed");
     }
     void write(int32_t value) {
-        if(value!=0 && value!=1) throw std::runtime_error("Invalid article expiration");
-        static const char column[]="expire_at";
-        check(serviceDispatchIn(&database.s,3,value,
+        if(value!=0 && value!=1) throw std::runtime_error("Invalid article visibility");
+        // Firmware 23.0.1 restricts this command to an explicit column allowlist.
+        // opted_in is writable; expire_at is rejected before executing SQL.
+        static const char column[]="opted_in";
+        Result rc=serviceDispatchIn(&database.s,3,value,
             .buffer_attrs={SfBufferAttr_HipcPointer|SfBufferAttr_In,SfBufferAttr_HipcPointer|SfBufferAttr_In},
-            .buffers={{column,sizeof(column)},{filter.c_str(),filter.size()+1}}),"Set original article expiration");
+            .buffers={{column,sizeof(column)},{filter.c_str(),filter.size()+1}});
+        if(logFile) {
+            std::fprintf(logFile,"Set original opted_in=%d: 0x%08X\n",value,rc);
+            std::fflush(logFile);
+        }
+        check(rc,"Set original article visibility");
     }
     // This IPC command commits in the News service before returning.
     void commit() {}
@@ -127,31 +134,59 @@ static void retireSubscriptionArticle(Article& article) {
     if(originalId.substr(2)!="00000000000000000442" || originalId.substr(0,2)=="LS")
         throw std::runtime_error("Expected the original non-local subscription record");
     NewsIndex index;
-    const std::string copyFilter="news_id='LS00000000000000000442' AND user_id='' AND topic_id='nx_notice'";
-    NewsRecord copies[2]{};uint32_t count=0;
-    check(newsDatabaseGetList(&index.service,copies,2,copyFilter.c_str(),"",&count,0),"Locate translated subscription article");
-    if(count!=1) throw std::runtime_error("Expected exactly one translated subscription copy; nothing retired");
-    if(recordFilter(copies[0])!=copyFilter) throw std::runtime_error("Translated article record identity mismatch");
-    Bytes actual=readArticle(copies[0]);
-    if(nativeArticleBytes(actual)!=article.translated) {
-        saveNew(article.backup+".expected",article.translated);
-        saveNew(article.backup+".copy-readback",actual);
-        throw std::runtime_error("Translated copy differs; comparison saved; nothing retired");
+    NewsRecord replacement{};unsigned matches=0;bool exhausted=false;
+    // The posting service may allocate a different local ID. Discover the copy
+    // by its complete transformed payload instead of guessing an LS record ID.
+    for(unsigned page=0;page<64;++page) {
+        NewsRecord records[64]{};uint32_t count=0;
+        check(newsDatabaseGetList(&index.service,records,64,"","",&count,page*64),"Find existing Ukrainian copy");
+        if(count>64) throw std::runtime_error("Invalid replacement index count");
+        for(uint32_t i=0;i<count;++i) {
+            if(records[i].user_id[0] ||
+               strnlen(records[i].topic_id.name,sizeof(records[i].topic_id.name))!=9 ||
+               std::memcmp(records[i].topic_id.name,"nx_notice",9)) continue;
+            std::string candidateFilter=recordFilter(records[i]);
+            if(candidateFilter==originalFilter) continue;
+            Bytes candidate=readArticle(records[i]);
+            Bytes payload=nativeArticleBytes(candidate);
+            if(payload==article.translated) {
+                ++matches;replacement=records[i];
+                if(logFile) std::fprintf(logFile,"Verified Ukrainian copy record: %s\n",records[i].news_id);
+            } else {
+                auto expectedRoot=Parser(article.translated).document();
+                auto actualRoot=Parser(payload).document();
+                auto expectedTitle=field(expectedRoot,article.translated,"subject.text");
+                auto actualTitle=field(actualRoot,payload,"subject.text");
+                if(expectedTitle && actualTitle && expectedTitle->string && actualTitle->string &&
+                   str(*expectedTitle,article.translated)==str(*actualTitle,payload)) {
+                    saveNew(article.backup+".candidate-"+std::to_string(page*64+i),candidate);
+                    if(logFile) std::fprintf(logFile,"Same-title copy differs: %s\n",records[i].news_id);
+                }
+            }
+        }
+        if(count<64) { exhausted=true;break; }
     }
-    ExpiryStore store{index.service,originalFilter};
-    if(store.read()!=0) throw std::runtime_error("Original article expiration is not zero; nothing changed");
-    std::string metadata="original_record="+originalId+"\noriginal_expire_at=0\nreplacement_record=LS00000000000000000442\n";
+    if(!exhausted) throw std::runtime_error("Replacement listing limit; nothing retired");
+    if(matches!=1) {
+        saveNew(article.backup+".expected",article.translated);
+        throw std::runtime_error("No unique exact Ukrainian copy found; nothing retired");
+    }
+    if(nativeArticleBytes(readArticle(replacement))!=article.translated)
+        throw std::runtime_error("Ukrainian copy changed; nothing retired");
+    VisibilityStore store{index.service,originalFilter};
+    if(store.read()!=1) throw std::runtime_error("Original article is already hidden; nothing changed");
+    std::string metadata="original_record="+originalId+"\noriginal_opted_in=1\nreplacement_record="+std::string(replacement.news_id)+"\n";
     saveNew(article.backup+".index-backup",Bytes(metadata.begin(),metadata.end()));
-    replaceVerified(store,int32_t(0),int32_t(1));
-    article.retired=true;article.replacementRecord=copies[0];
-    if(store.count(originalFilter+" AND (expire_at=0 OR expire_at>=2)")!=0)
+    replaceVerified(store,int32_t(1),int32_t(0));
+    article.retired=true;article.replacementRecord=replacement;
+    if(store.count(originalFilter+" AND opted_in=1")!=0)
         throw std::runtime_error("Old Russian article is still eligible for the News list");
-    if(nativeArticleBytes(readArticle(copies[0]))!=article.translated)
+    if(nativeArticleBytes(readArticle(replacement))!=article.translated)
         throw std::runtime_error("Translated copy changed during retirement");
 }
 static void restoreRetiredArticle(Article& article) {
-    NewsIndex index;ExpiryStore store{index.service,recordFilter(article.record)};
-    replaceVerified(store,int32_t(1),int32_t(0));article.retired=false;
+    NewsIndex index;VisibilityStore store{index.service,recordFilter(article.record)};
+    replaceVerified(store,int32_t(0),int32_t(1));article.retired=false;
 }
 static void printLog(const char* text) {
     std::printf("%s\n",text);
@@ -165,7 +200,7 @@ int main(int argc,char** argv) {
     try {
         mkdir(BASE.c_str(),0777);
         logFile=std::fopen((BASE+"/last-run.log").c_str(),"w");
-        printLog("Ukrainian News articles - 23.0.1 (helper 0.1.8)\n");
+        printLog("Ukrainian News articles - 23.0.1 (helper 0.1.10)\n");
         if (hosversionGet()!=MAKEHOSVERSION(23,0,1)) throw std::runtime_error("This build is for firmware 23.0.1 only");
         printLog("Reads existing built-in Russian tutorials. No network or keys.");
         printLog("Original articles are backed up before any change.");
@@ -175,7 +210,7 @@ int main(int argc,char** argv) {
         std::vector<Article> articles;unsigned scanned=0,already=0,skipped=0;size_t retained=0;
         auto now=time(nullptr);
         if(now<2) throw std::runtime_error("Console clock must be set before checking article expiration");
-        std::string activeFilter="(expire_at=0 OR expire_at>="+std::to_string(static_cast<long long>(now))+")";
+        std::string activeFilter="opted_in=1 AND (expire_at=0 OR expire_at>="+std::to_string(static_cast<long long>(now))+")";
         bool exhausted=false;
         for (unsigned page=0;page<64;++page) {
             NewsRecord records[64]{};uint32_t count=0;
@@ -219,8 +254,8 @@ int main(int argc,char** argv) {
             }
             printLog("All original tutorial backups saved and verified.");
             if (logFile) { std::fprintf(logFile,"Backup directory: %s\n",directory.c_str());std::fflush(logFile); }
-            std::snprintf(summary,sizeof(summary),"Ready: %u text changes. A verified Ukrainian copy replaces the old subscription entry.",total);printLog(summary);
-            printLog("\nA: apply Ukrainian text\nB / +: exit without changes");
+            std::snprintf(summary,sizeof(summary),"Ready: remove the Russian duplicate after verifying its Ukrainian copy (%u text fields).",total);printLog(summary);
+            printLog("\nA: remove Russian duplicate / apply remaining translations\nB / +: exit without changes");
             consoleUpdate(nullptr);
             bool apply=false;
             while(appletMainLoop()) {
@@ -249,7 +284,7 @@ int main(int argc,char** argv) {
                             throw std::runtime_error("Article readback mismatch; exact comparison saved on SD");
                         }
                     }
-                    std::snprintf(summary,sizeof(summary),"SUCCESS: %u Ukrainian articles verified; old subscription entry retired if present.",posted);printLog(summary);
+                    std::snprintf(summary,sizeof(summary),"SUCCESS: %u Ukrainian articles verified; Russian duplicate hidden if present.",posted);printLog(summary);
                     printLog("Exit, reopen News and check the article titles and bodies.");
                     printLog("Keep the backup folder until the result is confirmed.");
                 } catch (const std::exception& error) {

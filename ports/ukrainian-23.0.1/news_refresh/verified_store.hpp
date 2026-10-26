@@ -2,8 +2,14 @@
 #pragma once
 #include <exception>
 #include <stdexcept>
+#include <string>
 
 namespace newsmsg {
+inline std::string failureMessage(const std::exception_ptr& failure) {
+    try { std::rethrow_exception(failure); }
+    catch(const std::exception& error) { return error.what(); }
+    catch(...) { return "Unknown failure"; }
+}
 // Store supplies read(), write(bytes), and commit(). Never accept an unexpected
 // live original. A partial write, failed commit, or wrong readback restores and
 // verifies the exact original before propagating the failure.
@@ -23,7 +29,9 @@ void replaceVerified(Store& store,const Bytes& original,const Bytes& replacement
             store.commit();
             if (store.read()!=original) throw std::runtime_error("Restore readback mismatch");
         } catch (...) {
-            throw std::runtime_error("Stored article restore failed; keep the verified SD backup");
+            throw std::runtime_error("Stored article restore failed: "+
+                failureMessage(std::current_exception())+"; original error: "+
+                failureMessage(failure)+"; keep the verified SD backup");
         }
         std::rethrow_exception(failure);
     }
