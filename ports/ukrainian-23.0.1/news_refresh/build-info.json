@@ -1,6 +1,6 @@
 {
   "build": "compiled",
-  "runtime_console_tested": false,
+  "runtime_console_tested": true,
   "firmware": "23.0.1",
   "devkitA64": "r29.2-1",
   "libnx": "4.12.0-1",
@@ -10,5 +10,6 @@
   "nro_bytes": 811064,
   "host_tests": "12 tests passed with address and undefined-behavior sanitizers; seven private native captures, 45 mappings, rollback and error preservation; SQLite check that hiding one Russian record preserves its Ukrainian copy and unrelated records",
   "console_data_or_keys_in_source": false,
-  "helper_version": "0.1.10"
+  "helper_version": "0.1.10",
+  "console_result": "SUCCESS; seven Ukrainian articles confirmed; Russian duplicate no longer visible"
 }

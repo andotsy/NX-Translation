@@ -7,12 +7,12 @@
   "full_home_and_settings_tested": false,
   "full_build_still_requires_console_validation": true,
   "news_controls_display_ukrainian": true,
-  "built_in_news_articles_display_ukrainian": false,
-  "news_article_gap": "Seven Ukrainian articles confirmed; Russian subscription duplicate remains. 0.1.10 hides only the verified original using the supported per-record visibility flag; console result pending.",
+  "built_in_news_articles_display_ukrainian": true,
+  "news_article_gap": "Resolved on the tested console: all seven articles Ukrainian, only the Ukrainian subscription copy visible.",
   "news_overlay_sd_readback_matches_package": true,
   "news_refresh_helper_built": true,
   "news_refresh_helper_offline_tests_pass": true,
-  "news_refresh_helper_console_tested": false,
+  "news_refresh_helper_console_tested": true,
   "news_refresh_helper_version": "0.1.10",
   "news_refresh_initial_console_result": "0.1.0 stopped on trailing zero-filled native storage padding before any post",
   "news_refresh_native_capture_regression_pass": true,
@@ -24,6 +24,10 @@
   "news_refresh_unknown_post_untouched": true,
   "news_refresh_readers_closed_before_posting": true,
   "news_refresh_original_six_articles_console_confirmed": true,
-  "news_refresh_subscription_article_pending": true,
-  "news_refresh_subscription_article_update_method": "Verify complete Ukrainian copy, back up original visibility, set opted_in from 1 to 0 only on original non-local record, verify UI eligibility and unchanged Ukrainian payload; preserve native errors and rollback visibility on failure"
+  "news_refresh_subscription_article_pending": false,
+  "news_refresh_subscription_article_update_method": "Verify complete Ukrainian copy, back up original visibility, set opted_in from 1 to 0 only on original non-local record, verify UI eligibility and unchanged Ukrainian payload; preserve native errors and rollback visibility on failure",
+  "news_refresh_final_console_result": "0.1.10: SUCCESS; original opted_in update returned 0; user confirmed only Ukrainian copy remains.",
+  "keyboard_ukrainian_console_tested": true,
+  "keyboard_secondary_russian_console_tested": false,
+  "error_messages_console_tested": false
 }

@@ -24,16 +24,21 @@ console identifiers or local paths are included. This directory contains the new
 builder, tests and Ukrainian additions. The translation candidate ZIPs remain local.
 Do not install the old 22.5.0 binary overlay on 23.0.1.
 
-## Known News coverage gap
+## Retained News articles and optional additions
 
-Console photos show translated News controls with Russian built-in tutorial articles.
-The LocalNews translation is already built; runtime use and retained article content
-require separate checks. The installed overlay now matches the package byte-for-byte.
+The LocalNews overlay does not refresh articles already retained in News storage.
+The installed overlay was verified against the package before investigating this.
 See [NEWS.md](NEWS.md), the read-only diagnose_news.py and the optional
-[News refresh helper](news_refresh/README.md). The six original tutorials are
-confirmed translated. Version 0.1.8 verifies the remaining article's Ukrainian copy
-and retires only its obsolete Russian record through the News service. Its device
-validation is pending.
+[News refresh helper](news_refresh/README.md). All seven known articles are now
+confirmed Ukrainian, with only the Ukrainian subscription copy visible after
+helper 0.1.10 completed successfully.
+
+The optional [keyboard patch](keyboard/README.md) adds Ukrainian typing and uses
+the Russian Latin slot for Cyrillic Russian. Ukrainian typing is console-confirmed;
+the secondary Russian update is awaiting a console test. The separate
+[error-message overlay](errors/README.md) covers the airplane-mode popup and a
+subset of other system errors. These tools remain on the development branch;
+the upstream contribution contains translation catalog additions only.
 
 ## Local inputs
 

@@ -1,75 +1,34 @@
-# News tutorial articles: observed coverage gap
+# Retained built-in News articles
 
-Console photos confirm Ukrainian News controls, but Russian titles, channel name
-and body text in the built-in tutorial articles. This is a distinct coverage check
-from HOME, Settings or the successfully tested user-selection screen.
+The 22.5.0 upstream release already includes Ukrainian News text and a
+LocalNews overlay. The public release contains no article-refresh NRO. On the
+tested 23.0.1 console, the installed LocalNews overlay matched the package but
+previously stored Russian tutorial articles remained visible.
 
-The exact photographed text is present in the stock 23.0.1 LocalNews data archive
-(010000000000080B). The full overlay already includes Ukrainian replacements for
-all 41 nonempty records in message/EUru/localNews.msbt.szs (two other records are
-empty in the original), including the article subjects,
-channel name, eShop button and footer. No new translation is necessary for these
-specific screens. A translated file in a package does not prove the console uses it.
+The optional [refresh helper](news_refresh/README.md) translates the seven known
+articles through the News service. It preserves images, IDs and unrelated data,
+backs up native records to SD, and verifies each resulting article. Native readers
+must be closed before posting; a fresh reader is required for each article.
 
-## Read-only diagnostic
+Version 0.1.10 is confirmed successful on the console. The six tutorial articles
+and the channel-subscription article are Ukrainian. The user confirmed that only
+the Ukrainian subscription copy remains visible. The saved run log reported a
+successful update of the original record's per-record `opted_in` visibility flag.
 
-With the same local inputs/environment as the builder:
+The helper first verifies the entire Ukrainian copy, then backs up and hides only
+its recognized Russian original. It does not change channel subscriptions,
+clear News storage, delete system saves or write raw NAND. The firmware supports
+updating `opted_in`; attempts to update `expire_at` in earlier versions were
+rejected. The current helper retains native errors and restores the old visibility
+flag if post-update verification fails. Twelve host tests pass.
 
-```sh
-python3 diagnose_news.py
-python3 diagnose_news.py --sd-root /path/to/mounted/sd
-```
+The read-only `diagnose_news.py` still checks the LocalNews overlay's 43 records
+(41 nonempty), native structure and optional live-SD hash. These results and the
+News repair do not establish that every HOME or Settings screen has been tested.
 
-This validates the package, the 43-record coverage, the stock metadata preservation
-and (optionally) the installed file hash. It never writes to the SD or News database.
+## References
 
-Next steps:
-
-1. Verify the live SD file against the built package and confirm its parent path.
-2. If identical, distinguish a system-data mounting/redirection problem from a
-   retained article copy in News storage. Do not assume cache is proven by photos.
-3. Inspect/export only the relevant built-in tutorial records through the News
-   service before selecting a refresh method. Preserve existing records first.
-4. A later updater should use the same tutorial IDs and preserve metadata/images;
-   it must not clear the whole News database or alter subscriptions to repair text.
-
-The installed SD resource has now been verified byte-for-byte against the package.
-An optional [News refresh helper](news_refresh/README.md) is built and tested offline.
-Console captures contain six Russian tutorials and one channel-subscription
-article. The original six tutorials have 25 nonempty translated text fields.
-Native data-service buffers can retain earlier article bytes after the complete
-MessagePack map; each article also needs a fresh reader object. Helper 0.1.4
-passed regressions against all seven captures, but its first update returned
-0x127D. The attempted article was verified unchanged. Analysis of the matching
-firmware traces this result to the exclusive posting lock: both article readers
-and the database reader retain shared locks until their sessions close. Helper
-0.1.5 closes the index after enumeration and every article reader on return,
-including exceptions. A subsequent console scan confirms all six original
-tutorials translated. The user reports the remaining subscription article is
-still Russian. Version 0.1.6 adds its title, channel name/description, body and
-footer, with exact source hashes verified from the private capture and button
-glyphs preserved. Version 0.1.6 created a local Ukrainian copy but left the original record.
-Version 0.1.7 failed to mount the News save with 0xE02 (already in use), without
-writing the article file. Version 0.1.8 compares the complete Ukrainian copy with
-the expected transformed original, then sets only the old non-local record's
-expire_at from 0 to 1 through the News service. The original expiration is backed
-up; background cleanup stays suspended through verification and possible rollback.
-The matching News UI excludes expired entries. No separate save mount or raw NAND
-access is used. Twelve host tests pass; the latest device result remains pending.
-Do not describe the full system translation as completely console-validated.
-
-## Relevant upstream interfaces
-
-- [Atmosphere 1.12.1 filesystem redirection](https://github.com/Atmosphere-NX/Atmosphere/blob/1.12.1/stratosphere/ams_mitm/source/fs_mitm/fs_mitm_service.cpp)
-  includes OpenDataStorageByDataId. Its presence alone does not prove this caller
-  uses that interception path.
+- [Upstream Ukrainian catalog](https://github.com/NX-Family/NX-Translation/blob/main/translation/ukrainian.yaml)
+- [Upstream 22.5.0 release](https://github.com/NX-Family/NX-Translation/releases/tag/FW22.5.0-TR2.01)
 - [libnx News API](https://github.com/switchbrew/libnx/blob/master/nx/include/switch/services/news.h)
-  exposes reading News records/data and posting local News, separate from files
-  supplied by an SD overlay.
-- [libnx implementation](https://github.com/switchbrew/libnx/blob/master/nx/source/services/news.c)
-  provides the IPC details. A documented command is not a tested 23.0.1 updater.
-- [Observed News MessagePack structure](https://gist.github.com/jarrodnorwell/90629c3bf9e472e3277ffac0aa4a670f)
-  illustrates separate subject, topic name, body, footer, image and action fields.
-
-The normal System Settings “Clear Cache” action concerns web data and should not
-be prescribed as a verified method for refreshing these tutorial records.
+- [Atmosphère data archive redirection](https://github.com/Atmosphere-NX/Atmosphere/blob/1.12.1/stratosphere/ams_mitm/source/fs_mitm/fs_mitm_service.cpp)

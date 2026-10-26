@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / 'python-deps'))
 import oead
 from compare_resources import parse
 from msbt import Msbt, commands, decompress, text
-from prepare_translations import compile_template, printf_args, runtime
+from prepare_translations import compile_template, printf_args, runtime, render
 
 CURRENT = ROOT / 'firmware-23.0.1-resources'
 
@@ -49,6 +49,14 @@ def main():
                 assert runtime(after) == runtime(before)
             else:
                 after = bytes.fromhex(row['translated_hex'])
+            # ErrorMessage popups select the explicit locale variant, rather
+            # than the generic label. This literal is Russian even in EUen.
+            if (title == '0100000000001005' and path == 'message/EUru/error.msbt.szs'
+                    and 'ErrCmn_LblErrCode_EUru' in row['labels']):
+                assert render(before) == 'Код ошибки: <C0/>'
+                after = compile_template('Код помилки: <C0/>', before)
+                assert commands(after) == commands(before)
+                metrics['locale_variant_overrides'] += 1
             assert not re.search(r'<(?:C\d+|TAG\d+|LIST\d+|NL)/>', text(after)), 'Exporter marker leaked'
             messages.append(after)
             metrics['manual_translation' if row['method'] == 'manual_required' else row['method']] += 1

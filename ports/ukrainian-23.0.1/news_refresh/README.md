@@ -4,12 +4,10 @@ This optional firmware-23.0.1 helper translates known Russian News articles that
 remain in storage after the system overlay is installed. It uses News services;
 no keys, network, raw NAND access or separate system-save mount is needed.
 
-**Status:** six tutorials and the Ukrainian subscription article have been
-confirmed on the console. A Russian duplicate remains. Version 0.1.9 verified
-its Ukrainian counterpart but failed when changing expiration: the firmware's
-integer-update allowlist excludes expire_at. Version 0.1.10 uses the supported
-per-record opted_in flag to hide only the original. Installed; console validation
-is pending. Twelve host tests pass.
+**Status:** all seven known articles are confirmed Ukrainian on the console.
+Version 0.1.10 returned SUCCESS, and the user confirmed that only the Ukrainian
+subscription article remains visible. It uses the supported per-record opted_in
+flag to hide only the verified Russian original. Twelve host tests pass.
 
 ## Behavior
 
