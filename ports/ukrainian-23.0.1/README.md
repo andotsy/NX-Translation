@@ -43,7 +43,7 @@ the upstream contribution contains translation catalog additions only.
 The [Health and Safety page](safety/README.md) is a separate HTML overlay for the
 Help data archive. It translates every nonempty linguistic span and the title,
 preserving the native document shell and safety numbers. Its SD installation is
-verified; on-console rendering confirmation is pending.
+verified, and the user confirmed that the page displays Ukrainian on the console.
 
 ## Local inputs
 

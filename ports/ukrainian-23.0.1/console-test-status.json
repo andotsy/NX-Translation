@@ -31,7 +31,8 @@
   "keyboard_secondary_russian_console_tested": false,
   "error_messages_console_tested": false,
   "safety_html_installed": true,
-  "safety_html_console_tested": false,
+  "safety_html_console_tested": true,
   "safety_html_translated_spans": 69,
-  "news_refresh_helper_removed_after_success": true
+  "news_refresh_helper_removed_after_success": true,
+  "safety_html_console_result": "User confirmed the Safety Information page displays Ukrainian on firmware 23.0.1."
 }

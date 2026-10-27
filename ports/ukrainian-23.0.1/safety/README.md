@@ -24,8 +24,9 @@ The output contains one translated HTML file, a hash manifest and catalog entrie
 
 Copy the generated atmosphere folder onto the SD and reboot. Open System Settings
 → Safety Information and scroll through the full document to check rendering.
-The current build was installed with byte-for-byte SD readback verification;
-on-console rendering confirmation remains pending. No helper application is needed.
+The current build was installed with byte-for-byte SD readback verification,
+and the user confirmed that the page displays Ukrainian on firmware 23.0.1.
+No helper application is needed.
 
 To remove this optional page overlay, remove only
 `atmosphere/contents/0100000000000804/romfs/safe.htdocs/html/EUru/index.html`.
