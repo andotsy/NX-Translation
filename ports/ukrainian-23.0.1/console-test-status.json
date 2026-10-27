@@ -29,5 +29,9 @@
   "news_refresh_final_console_result": "0.1.10: SUCCESS; original opted_in update returned 0; user confirmed only Ukrainian copy remains.",
   "keyboard_ukrainian_console_tested": true,
   "keyboard_secondary_russian_console_tested": false,
-  "error_messages_console_tested": false
+  "error_messages_console_tested": false,
+  "safety_html_installed": true,
+  "safety_html_console_tested": false,
+  "safety_html_translated_spans": 69,
+  "news_refresh_helper_removed_after_success": true
 }
